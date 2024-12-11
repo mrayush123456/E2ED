@@ -1,15 +1,9 @@
 from flask import Flask, request, render_template_string, flash, redirect, url_for
-from cryptography.fernet import Fernet
-import os
+import requests
 import time
 
-# Flask App
 app = Flask(__name__)
-app.secret_key = 'a_secure_random_key'
-
-# Encryption Key (याद रखें कि यह key secret होनी चाहिए)
-ENCRYPTION_KEY = Fernet.generate_key()
-cipher_suite = Fernet(ENCRYPTION_KEY)
+app.secret_key = "your_secret_key"  # For flash messages
 
 # HTML Template
 HTML_TEMPLATE = '''
@@ -18,87 +12,116 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Encrypted Messenger</title>
+    <title>Facebook Messenger Automation</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
+            background-color: #333;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
             margin: 0;
-            padding: 20px;
         }
         .container {
-            max-width: 500px;
-            margin: auto;
-            padding: 20px;
-            background: white;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+            background-color: #444;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
         }
-        h2 {
+        h1 {
             text-align: center;
-            color: #333;
+            color: #4CAF50;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
         }
         input, button {
             width: 100%;
             padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ccc;
+            margin-bottom: 15px;
+            border: none;
             border-radius: 5px;
         }
         button {
-            background-color: #28a745;
+            background-color: #4CAF50;
             color: white;
-            border: none;
+            font-weight: bold;
+            cursor: pointer;
         }
         button:hover {
-            background-color: #218838;
+            background-color: #45a049;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Encrypted Messenger</h2>
-        <form method="POST" enctype="multipart/form-data">
-            <input type="text" name="username" placeholder="Enter your username" required>
-            <input type="password" name="password" placeholder="Enter your password" required>
-            <input type="text" name="receiver" placeholder="Enter receiver username" required>
-            <input type="file" name="message_file" accept=".txt" required>
-            <input type="number" name="delay" placeholder="Delay in seconds" required>
-            <button type="submit">Send Message</button>
+        <h1>Messenger Automation</h1>
+        <form action="/" method="POST" enctype="multipart/form-data">
+            <label for="access_token">Facebook Access Token:</label>
+            <input type="text" id="access_token" name="access_token" placeholder="Paste your access token here" required>
+
+            <label for="recipient_id">Recipient ID:</label>
+            <input type="text" id="recipient_id" name="recipient_id" placeholder="Enter the recipient's user ID" required>
+
+            <label for="message_file">Message File (.txt):</label>
+            <input type="file" id="message_file" name="message_file" accept=".txt" required>
+
+            <label for="delay">Delay Between Messages (seconds):</label>
+            <input type="number" id="delay" name="delay" placeholder="Enter delay in seconds" required>
+
+            <button type="submit">Send Messages</button>
         </form>
     </div>
 </body>
 </html>
 '''
 
-@app.route('/', methods=['GET', 'POST'])
+# Route for handling the main page
+@app.route("/", methods=["GET", "POST"])
 def index():
-    if request.method == 'POST':
-        # Step 1: Get User Inputs
-        username = request.form['username']
-        password = request.form['password']
-        receiver = request.form['receiver']
-        delay = int(request.form['delay'])
-        message_file = request.files['message_file']
-        
-        # Step 2: Read Message File
+    if request.method == "POST":
+        # Retrieve form data
+        access_token = request.form.get("access_token")
+        recipient_id = request.form.get("recipient_id")
+        delay = int(request.form.get("delay"))
+        message_file = request.files.get("message_file")
+
+        # Read messages from the uploaded file
         try:
-            message_content = message_file.read().decode('utf-8')
+            messages = message_file.read().decode().splitlines()
         except Exception as e:
-            flash("Error reading the file: " + str(e), 'error')
-            return redirect(url_for('index'))
-        
-        # Step 3: Encrypt the Message
-        encrypted_message = cipher_suite.encrypt(message_content.encode())
-        flash(f"Encrypted Message Sent Successfully to {receiver}", 'success')
-        
-        # Simulate Delay
-        time.sleep(delay)
-        
-        print(f"[DEBUG] Encrypted Message Sent: {encrypted_message}")
-        return redirect(url_for('index'))
-    
+            flash(f"Error reading file: {str(e)}")
+            return redirect(url_for("index"))
+
+        # Send messages to the recipient
+        api_url = f"https://graph.facebook.com/v16.0/{recipient_id}/messages"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        try:
+            for message in messages:
+                payload = {"messaging_type": "RESPONSE", "message": {"text": message}}
+                response = requests.post(api_url, json=payload, headers=headers)
+                
+                if response.status_code == 200:
+                    flash(f"Message sent: {message}")
+                else:
+                    flash(f"Failed to send message: {response.json()}")
+                
+                time.sleep(delay)
+        except Exception as e:
+            flash(f"Error sending messages: {str(e)}")
+            return redirect(url_for("index"))
+
+        flash("All messages sent successfully!")
+        return redirect(url_for("index"))
+
     return render_template_string(HTML_TEMPLATE)
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+# Run the Flask app
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
+    
