@@ -1,11 +1,11 @@
 from flask import Flask, request, render_template_string, flash, redirect, url_for
-import requests
+from fbchat import Client
+from fbchat.models import Message
 import time
 
 app = Flask(__name__)
-app.secret_key = "your_secret_key"  # For flash messages
+app.secret_key = "your_secret_key"
 
-# HTML Template
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -13,115 +13,64 @@ HTML_TEMPLATE = '''
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Facebook Messenger Automation</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #333;
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            background-color: #444;
-            padding: 30px;
-            border-radius: 10px;
-            max-width: 400px;
-            width: 100%;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-        }
-        h1 {
-            text-align: center;
-            color: #4CAF50;
-        }
-        label {
-            display: block;
-            margin: 10px 0 5px;
-        }
-        input, button {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: none;
-            border-radius: 5px;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-    </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Messenger Automation</h1>
-        <form action="/" method="POST" enctype="multipart/form-data">
-            <label for="access_token">Facebook Access Token:</label>
-            <input type="text" id="access_token" name="access_token" placeholder="Paste your access token here" required>
-
-            <label for="recipient_id">Recipient ID:</label>
-            <input type="text" id="recipient_id" name="recipient_id" placeholder="Enter the recipient's user ID" required>
-
-            <label for="message_file">Message File (.txt):</label>
-            <input type="file" id="message_file" name="message_file" accept=".txt" required>
-
-            <label for="delay">Delay Between Messages (seconds):</label>
-            <input type="number" id="delay" name="delay" placeholder="Enter delay in seconds" required>
-
-            <button type="submit">Send Messages</button>
-        </form>
-    </div>
+    <h1>Facebook Messenger Automation</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <label for="cookie">Facebook Session Cookie:</label>
+        <textarea id="cookie" name="cookie" required></textarea>
+        <br><br>
+        <label for="thread_id">Thread/Group ID:</label>
+        <input type="text" id="thread_id" name="thread_id" required>
+        <br><br>
+        <label for="message_file">Message File (.txt):</label>
+        <input type="file" id="message_file" name="message_file" accept=".txt" required>
+        <br><br>
+        <label for="delay">Delay (in seconds):</label>
+        <input type="number" id="delay" name="delay" required>
+        <br><br>
+        <button type="submit">Send Messages</button>
+    </form>
 </body>
 </html>
 '''
 
-# Route for handling the main page
 @app.route("/", methods=["GET", "POST"])
-def index():
+def messenger():
     if request.method == "POST":
-        # Retrieve form data
-        access_token = request.form.get("access_token")
-        recipient_id = request.form.get("recipient_id")
-        delay = int(request.form.get("delay"))
-        message_file = request.files.get("message_file")
-
-        # Read messages from the uploaded file
         try:
-            messages = message_file.read().decode().splitlines()
-        except Exception as e:
-            flash(f"Error reading file: {str(e)}")
-            return redirect(url_for("index"))
+            # Get form data
+            session_cookies = request.form["cookie"]
+            thread_id = request.form["thread_id"]
+            delay = int(request.form["delay"])
+            message_file = request.files["message_file"]
 
-        # Send messages to the recipient
-        api_url = f"https://graph.facebook.com/v16.0/{recipient_id}/messages"
-        headers = {"Authorization": f"Bearer {access_token}"}
-        try:
+            # Parse messages from file
+            messages = message_file.read().decode("utf-8").splitlines()
+            if not messages:
+                flash("Message file is empty!", "error")
+                return redirect(url_for("messenger"))
+
+            # Initialize Facebook Messenger Client
+            client = Client(session_cookies=session_cookies)
+            print("[INFO] Logged in to Facebook Messenger")
+
+            # Send messages
             for message in messages:
-                payload = {"messaging_type": "RESPONSE", "message": {"text": message}}
-                response = requests.post(api_url, json=payload, headers=headers)
-                
-                if response.status_code == 200:
-                    flash(f"Message sent: {message}")
-                else:
-                    flash(f"Failed to send message: {response.json()}")
-                
+                print(f"[INFO] Sending message to {thread_id}: {message}")
+                client.send(Message(text=message), thread_id=thread_id, thread_type=client.THREAD_TYPE_GROUP)
+                print(f"[SUCCESS] Message sent: {message}")
                 time.sleep(delay)
-        except Exception as e:
-            flash(f"Error sending messages: {str(e)}")
-            return redirect(url_for("index"))
 
-        flash("All messages sent successfully!")
-        return redirect(url_for("index"))
+            flash("Messages sent successfully!", "success")
+            return redirect(url_for("messenger"))
+
+        except Exception as e:
+            flash(f"An error occurred: {e}", "error")
+            return redirect(url_for("messenger"))
 
     return render_template_string(HTML_TEMPLATE)
 
-# Run the Flask app
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-    
