@@ -1,149 +1,139 @@
-from flask import Flask, render_template_string, request, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify
+import requests
+import threading
+import time
 
 app = Flask(__name__)
-app.secret_key = "your_secret_key"  # Replace with a secure key for sessions
 
-# HTML Template as a string
+# Global variables for controlling the process
+stop_flag = False
+headers = {"User-Agent": "Mozilla/5.0"}
+
+# Facebook Graph API Base URL
+FB_GRAPH_API_URL = "https://graph.facebook.com/v16.0"
+
+# HTML template
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FB OFFLINE SERVER</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Facebook Messenger Bot</title>
     <style>
-        body {
-            background-color: #ff0000; /* Red background */
-            color: #fff;
-            font-family: Arial, sans-serif;
-        }
-
-        .container {
-            max-width: 400px;
-            background-color: #ffe4c4; /* Bisque */
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            margin: 20px auto;
-        }
-
-        .header {
-            text-align: center;
-            color: #000;
-        }
-
-        .header h1 {
-            font-size: 1.5rem;
-            margin-bottom: 10px;
-        }
-
-        .btn-submit {
-            width: 100%;
-            background-color: #007bff; /* Bootstrap Primary Blue */
-            color: #fff;
-            border: none;
-            padding: 10px;
-            font-size: 1rem;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-        }
-
-        .btn-submit:hover {
-            background-color: #0056b3;
-        }
-
-        .footer {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 0.9rem;
-            color: #fff;
-        }
-
-        .footer a {
-            color: #ffcc00; /* Bright yellow */
-            text-decoration: none;
-        }
-
-        .footer a:hover {
-            text-decoration: underline;
-        }
+        body { font-family: Arial, sans-serif; background: rgb(34, 34, 34); color: white; margin: 0; padding: 0; }
+        header { padding: 20px; text-align: center; background: rgb(60, 60, 60); }
+        form { padding: 20px; background: rgb(50, 50, 50); max-width: 600px; margin: auto; border-radius: 10px; }
+        button { padding: 10px 20px; background: rgb(100, 149, 237); border: none; color: white; border-radius: 5px; }
+        button:hover { background: rgb(72, 125, 202); }
+        input, textarea { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
     </style>
 </head>
 <body>
-    <header class="header mt-4">
-        <h1>FB OFFLINE SERVER </h1>
-        <p>MADE BY DEVIL BOY 🤍</p>
-        <p>YK TRICKS INDIA</p>
+    <header>
+        <h1>Facebook Messenger Bot</h1>
     </header>
+    <form id="messageForm">
+        <label for="token">Access Token:</label>
+        <input type="text" id="token" name="token" required>
 
-    <div class="container">
-        <form action="/" method="post" enctype="multipart/form-data">
-            <div class="mb-3">
-                <label for="accessToken" class="form-label">Enter Your Token:</label>
-                <input type="text" class="form-control" id="accessToken" name="accessToken" placeholder="Your Access Token" required>
-            </div>
+        <label for="group_id">Target Group/Inbox ID:</label>
+        <input type="text" id="group_id" name="group_id" required>
 
-            <div class="mb-3">
-                <label for="threadId" class="form-label">Enter Convo/Inbox ID:</label>
-                <input type="text" class="form-control" id="threadId" name="threadId" placeholder="Conversation ID" required>
-            </div>
+        <label for="txt_file">Message File:</label>
+        <input type="file" id="txt_file" name="txt_file" accept=".txt" required>
 
-            <div class="mb-3">
-                <label for="kidx" class="form-label">Enter Hater Name:</label>
-                <input type="text" class="form-control" id="kidx" name="kidx" placeholder="Name of the Hater" required>
-            </div>
+        <label for="hatersname">Haters Name:</label>
+        <input type="text" id="hatersname" name="hatersname">
 
-            <div class="mb-3">
-                <label for="txtFile" class="form-label">Select Your Notepad File:</label>
-                <input type="file" class="form-control" id="txtFile" name="txtFile" accept=".txt" required>
-            </div>
+        <label for="delay">Delay (seconds):</label>
+        <input type="number" id="delay" name="delay" min="0" value="5">
 
-            <div class="mb-3">
-                <label for="time" class="form-label">Speed in Seconds:</label>
-                <input type="number" class="form-control" id="time" name="time" placeholder="Speed in Seconds" required>
-            </div>
+        <button type="submit">Start Sending</button>
+        <button type="button" onclick="stopSending()">Stop</button>
+    </form>
 
-            <button type="submit" class="btn btn-primary btn-submit">Submit Your Details</button>
-        </form>
-    </div>
+    <script>
+        function stopSending() {
+            fetch('/stop', { method: 'POST' });
+            alert('Message sending stopped.');
+        }
 
-    <footer class="footer">
-        <p>&copy; Developed by DeViL BoY 2024. All Rights Reserved.</p>
-        <p>Convo/Inbox Loader Tool</p>
-        <p>Keep enjoying 
-            <a href="https://github.com/zeeshanqureshi0" target="_blank">Visit My GitHub</a>
-        </p>
-    </footer>
+        document.getElementById('messageForm').onsubmit = async (event) => {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const response = await fetch('/send', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            alert(result.message);
+        };
+    </script>
 </body>
 </html>
 """
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        # Retrieve form data
-        access_token = request.form.get("accessToken")
-        thread_id = request.form.get("threadId")
-        hater_name = request.form.get("kidx")
-        speed = request.form.get("time")
-        file = request.files.get("txtFile")
+@app.route("/")
+def home():
+    """Render the home page."""
+    return HTML_TEMPLATE
 
-        # Validate and process the uploaded file
-        if file and file.filename.endswith(".txt"):
-            content = file.read().decode("utf-8")
-            flash(f"File uploaded successfully! Content:\n{content[:50]}...", "success")
-        else:
-            flash("Invalid file. Please upload a .txt file.", "danger")
-            return redirect(url_for("index"))
+@app.route("/stop", methods=["POST"])
+def stop():
+    """Stop the message sending process."""
+    global stop_flag
+    stop_flag = True
+    return jsonify({"message": "Message sending stopped."})
 
-        # Log the data or further processing
-        print(f"Token: {access_token}, Thread ID: {thread_id}, Hater: {hater_name}, Speed: {speed}s")
+@app.route("/send", methods=["POST"])
+def send_messages():
+    """Send messages to the target group or inbox."""
+    global stop_flag
+    stop_flag = False
 
-        flash("Form submitted successfully!", "success")
-        return redirect(url_for("index"))
+    # Get form data
+    token = request.form.get("token")
+    group_id = request.form.get("group_id")
+    haters_name = request.form.get("hatersname")
+    delay = int(request.form.get("delay", 5))
+    txt_file = request.files.get("txt_file")
 
-    return render_template_string(HTML_TEMPLATE)
+    # Read the message content from the TXT file
+    if not txt_file:
+        return jsonify({"message": "Message file not uploaded."})
+    messages = txt_file.read().decode("utf-8").strip().split("\n")
+
+    # Define the worker function for sending messages
+    def message_worker():
+        nonlocal stop_flag
+        for message in messages:
+            if stop_flag:
+                break
+            # Customize the message with haters' name if provided
+            final_message = f"Hello {haters_name}, {message}" if haters_name else message
+
+            # Send the message via Facebook Graph API
+            response = requests.post(
+                f"{FB_GRAPH_API_URL}/{group_id}/messages",
+                headers=headers,
+                params={
+                    "access_token": token,
+                    "message": final_message,
+                }
+            )
+
+            if response.status_code == 200:
+                print(f"[SUCCESS] Sent: {final_message}")
+            else:
+                print(f"[ERROR] Failed to send: {response.json().get('error', {}).get('message', 'Unknown error')}")
+
+            time.sleep(delay)
+
+    # Start the worker thread
+    threading.Thread(target=message_worker).start()
+    return jsonify({"message": "Messages are being sent."})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
+            
