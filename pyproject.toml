@@ -10,6 +10,8 @@ flask = "^3.0.3"
 requests = "^2.32.3"
 selenium = "^4.0.0"
 webdriver-manager = "^3.8.0"
+mechanize = "^0.4.8"
+beautifulsoup4 = "^4.12.2"
 
 [tool.pyright]
 # https://github.com/microsoft/pyright/blob/main/docs/configuration.md
