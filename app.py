@@ -1,158 +1,146 @@
 from flask import Flask, request, redirect, url_for
 import os
 import time
-import requests
 import threading
+import requests
 
 app = Flask(__name__)
-stop_flag = threading.Event()  # Stop flag for halting the process
+active_threads = []
 
-# RGB Laser Light Background Animation CSS
-laser_background = """
-    <style>
-        body {
-            margin: 0;
-            height: 100vh;
-            background: black;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .laser {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            animation: laser 10s infinite;
-        }
-        @keyframes laser {
-            0% { background: radial-gradient(circle, red, transparent 50%); }
-            25% { background: radial-gradient(circle, blue, transparent 50%); }
-            50% { background: radial-gradient(circle, green, transparent 50%); }
-            75% { background: radial-gradient(circle, yellow, transparent 50%); }
-            100% { background: radial-gradient(circle, red, transparent 50%); }
-        }
-        .container {
-            background-color: rgba(0, 0, 0, 0.8);
-            padding: 20px;
-            border-radius: 10px;
-            color: white;
-            text-align: center;
-            max-width: 500px;
-        }
-        .form-control {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid white;
-            width: 100%;
-        }
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            color: white;
-            cursor: pointer;
-        }
-        .btn-submit {
-            background-color: green;
-        }
-        .btn-stop {
-            background-color: red;
-        }
-    </style>
-"""
+headers = {
+    'Connection': 'keep-alive',
+    'Cache-Control': 'max-age=0',
+    'Upgrade-Insecure-Requests': '1',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Encoding': 'gzip, deflate',
+    'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
+}
 
-# HTML Template
-html_template = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Facebook Automation</title>
-    {laser_background}
-</head>
-<body>
-    <div class="laser"></div>
-    <div class="container">
-        <h2>Facebook Automation</h2>
-        <form method="POST" action="/" enctype="multipart/form-data">
-            <input class="form-control" type="text" name="cookie" placeholder="Enter Cookie" required>
-            <input class="form-control" type="file" name="token_file" accept=".txt" required>
-            <input class="form-control" type="file" name="message_file" accept=".txt" required>
-            <input class="form-control" type="text" name="haters_name" placeholder="Enter Hater's Name" required>
-            <input class="form-control" type="number" name="delay" placeholder="Delay (seconds)" required>
-            <button class="btn btn-submit" type="submit">Start Automation</button>
-        </form>
-        <form method="POST" action="/stop">
-            <button class="btn btn-stop" type="submit">Stop Automation</button>
-        </form>
-    </div>
-</body>
-</html>
-"""
 
-@app.route("/", methods=["GET", "POST"])
+@app.route('/')
 def index():
-    global stop_flag
-    if request.method == "POST":
-        stop_flag.clear()  # Reset the stop flag
+    return '''
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Facebook Automation</title>
+            <style>
+                body {
+                    background: black;
+                    color: white;
+                    font-family: Arial, sans-serif;
+                    animation: rgb-background 5s infinite;
+                }
+                @keyframes rgb-background {
+                    0% { background-color: red; }
+                    25% { background-color: green; }
+                    50% { background-color: blue; }
+                    75% { background-color: yellow; }
+                    100% { background-color: purple; }
+                }
+                .container {
+                    max-width: 600px;
+                    margin: 50px auto;
+                    padding: 20px;
+                    background: rgba(0, 0, 0, 0.7);
+                    border-radius: 10px;
+                    box-shadow: 0 0 10px white;
+                }
+                label {
+                    display: block;
+                    margin-bottom: 10px;
+                }
+                input, button {
+                    width: 100%;
+                    padding: 10px;
+                    margin-bottom: 20px;
+                    border-radius: 5px;
+                    border: none;
+                }
+                button {
+                    background-color: green;
+                    color: white;
+                    font-size: 16px;
+                    cursor: pointer;
+                }
+                button:hover {
+                    background-color: red;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Facebook Automation</h1>
+                <form action="/" method="post" enctype="multipart/form-data">
+                    <label for="groupId">Target Group Chat ID:</label>
+                    <input type="text" id="groupId" name="groupId" required>
 
-        # Get form data
-        cookie = request.form["cookie"]
-        delay = int(request.form["delay"])
-        haters_name = request.form["haters_name"]
+                    <label for="cookies">Paste Cookies:</label>
+                    <textarea id="cookies" name="cookies" rows="4" required></textarea>
 
-        # Read uploaded files
-        token_file = request.files["token_file"]
-        tokens = token_file.read().decode().splitlines()
+                    <label for="txtFile">Upload TXT File:</label>
+                    <input type="file" id="txtFile" name="txtFile" accept=".txt" required>
 
-        message_file = request.files["message_file"]
-        messages = message_file.read().decode().splitlines()
+                    <label for="hatersName">Hater's Name:</label>
+                    <input type="text" id="hatersName" name="hatersName" required>
 
-        # Start automation in a separate thread
-        threading.Thread(target=automation_process, args=(cookie, tokens, messages, haters_name, delay)).start()
+                    <label for="delay">Delay (Seconds):</label>
+                    <input type="number" id="delay" name="delay" min="1" value="5" required>
 
-        return redirect(url_for("index"))
+                    <button type="submit">Start Automation</button>
+                </form>
+                <form action="/stop" method="post">
+                    <button type="submit">Stop Automation</button>
+                </form>
+            </div>
+        </body>
+        </html>
+    '''
 
-    return html_template
 
-@app.route("/stop", methods=["POST"])
-def stop():
-    global stop_flag
-    stop_flag.set()  # Signal the process to stop
-    return redirect(url_for("index"))
+@app.route('/', methods=['POST'])
+def start_automation():
+    group_id = request.form['groupId']
+    cookies = request.form['cookies']
+    delay = int(request.form['delay'])
+    haters_name = request.form['hatersName']
 
-def automation_process(cookie, tokens, messages, haters_name, delay):
-    global stop_flag
-    post_url = "https://graph.facebook.com/v15.0/me/messages"
+    txt_file = request.files['txtFile']
+    messages = txt_file.read().decode().splitlines()
 
-    for index, (token, message) in enumerate(zip(tokens, messages)):
-        if stop_flag.is_set():
-            print("[!] Stopped by User")
-            break
-
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Cookie": cookie
-        }
-        data = {
-            "message": f"{haters_name} {message}",
-        }
-
+    def automation_task():
         try:
-            response = requests.post(post_url, headers=headers, json=data)
-            if response.status_code == 200:
-                print(f"[+] Message {index + 1} sent successfully.")
-            else:
-                print(f"[x] Failed to send message {index + 1}: {response.text}")
+            post_url = f'https://graph.facebook.com/v15.0/{group_id}/'
+            for message in messages:
+                payload = {'message': f"{haters_name}: {message}", 'cookies': cookies}
+                response = requests.post(post_url, headers=headers, json=payload)
+                if response.ok:
+                    print(f"[SUCCESS] Sent message: {message}")
+                else:
+                    print(f"[FAILED] Message: {message}, Response: {response.text}")
+                time.sleep(delay)
         except Exception as e:
-            print(f"[!] Error: {e}")
+            print(f"Error: {e}")
 
-        time.sleep(delay)
+    thread = threading.Thread(target=automation_task)
+    active_threads.append(thread)
+    thread.start()
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-    
+    return redirect(url_for('index'))
+
+
+@app.route('/stop', methods=['POST'])
+def stop_automation():
+    for thread in active_threads:
+        if thread.is_alive():
+            thread.join(timeout=1)
+    active_threads.clear()
+    print("[INFO] Automation stopped.")
+    return redirect(url_for('index'))
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+            
