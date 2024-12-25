@@ -1,11 +1,13 @@
-from flask import Flask, request, redirect, url_for
-import os
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 import time
-import threading
+import os
 import requests
+from threading import Thread
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import base64
 
 app = Flask(__name__)
-active_threads = []
 
 headers = {
     'Connection': 'keep-alive',
@@ -15,132 +17,144 @@ headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
     'Accept-Encoding': 'gzip, deflate',
     'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
+    'referer': 'www.google.com'
 }
-
 
 @app.route('/')
 def index():
     return '''
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Facebook Automation</title>
-            <style>
-                body {
-                    background: black;
-                    color: white;
-                    font-family: Arial, sans-serif;
-                    animation: rgb-background 5s infinite;
-                }
-                @keyframes rgb-background {
-                    0% { background-color: red; }
-                    25% { background-color: green; }
-                    50% { background-color: blue; }
-                    75% { background-color: yellow; }
-                    100% { background-color: purple; }
-                }
-                .container {
-                    max-width: 600px;
-                    margin: 50px auto;
-                    padding: 20px;
-                    background: rgba(0, 0, 0, 0.7);
-                    border-radius: 10px;
-                    box-shadow: 0 0 10px white;
-                }
-                label {
-                    display: block;
-                    margin-bottom: 10px;
-                }
-                input, button {
-                    width: 100%;
-                    padding: 10px;
-                    margin-bottom: 20px;
-                    border-radius: 5px;
-                    border: none;
-                }
-                button {
-                    background-color: green;
-                    color: white;
-                    font-size: 16px;
-                    cursor: pointer;
-                }
-                button:hover {
-                    background-color: red;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>Facebook Automation</h1>
-                <form action="/" method="post" enctype="multipart/form-data">
-                    <label for="groupId">Target Group Chat ID:</label>
-                    <input type="text" id="groupId" name="groupId" required>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Facebook Automation</title>
+        <style>
+            body {
+                background: rgb(0,0,0);
+                background: linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(255,0,150,1) 35%, rgba(0,255,255,1) 100%);
+                animation: gradient 3s ease infinite;
+                height: 100vh;
+                color: white;
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                flex-direction: column;
+            }
+            @keyframes gradient {
+                0% {background: linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(255,0,150,1) 35%, rgba(0,255,255,1) 100%);}
+                50% {background: linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(255,0,255,1) 35%, rgba(0,255,0,1) 100%);}
+                100% {background: linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(255,0,150,1) 35%, rgba(0,255,255,1) 100%);}
+            }
+            .container {
+                width: 400px;
+                padding: 30px;
+                background: rgba(0, 0, 0, 0.5);
+                border-radius: 10px;
+                box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+            }
+            label, button, input {
+                width: 100%;
+                margin-bottom: 15px;
+                padding: 10px;
+                border-radius: 5px;
+                border: 1px solid white;
+            }
+            button {
+                background-color: #4CAF50;
+                color: white;
+                cursor: pointer;
+            }
+            button:hover {
+                background-color: #45a049;
+            }
+            input[type="file"] {
+                background-color: transparent;
+                border: none;
+                color: white;
+                cursor: pointer;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Facebook Automation</h2>
+            <form action="/start" method="POST" enctype="multipart/form-data">
+                <label for="cookies">Paste Cookies Here:</label>
+                <textarea name="cookies" rows="4" placeholder="Enter Facebook Cookies"></textarea>
 
-                    <label for="cookies">Paste Cookies:</label>
-                    <textarea id="cookies" name="cookies" rows="4" required></textarea>
+                <label for="target_group">Target Group Chat/Inbox URL:</label>
+                <input type="text" name="target_group" placeholder="Group/Inbox URL">
 
-                    <label for="txtFile">Upload TXT File:</label>
-                    <input type="file" id="txtFile" name="txtFile" accept=".txt" required>
+                <label for="file">Select a Message File (.txt):</label>
+                <input type="file" name="file" accept=".txt" required>
 
-                    <label for="hatersName">Hater's Name:</label>
-                    <input type="text" id="hatersName" name="hatersName" required>
+                <label for="haters_name">Enter Hater's Name:</label>
+                <input type="text" name="haters_name" placeholder="Hater's Name" required>
 
-                    <label for="delay">Delay (Seconds):</label>
-                    <input type="number" id="delay" name="delay" min="1" value="5" required>
+                <label for="delay">Delay (in seconds):</label>
+                <input type="number" name="delay" value="5" required>
 
-                    <button type="submit">Start Automation</button>
-                </form>
-                <form action="/stop" method="post">
-                    <button type="submit">Stop Automation</button>
-                </form>
-            </div>
-        </body>
-        </html>
+                <button type="submit">Start Automation</button>
+            </form>
+            <button onclick="window.location.href='/stop'">Stop Automation</button>
+        </div>
+    </body>
+    </html>
     '''
 
-
-@app.route('/', methods=['POST'])
+@app.route('/start', methods=['POST'])
 def start_automation():
-    group_id = request.form['groupId']
     cookies = request.form['cookies']
+    target_group = request.form['target_group']
     delay = int(request.form['delay'])
-    haters_name = request.form['hatersName']
+    file = request.files['file']
+    hater_name = request.form['haters_name']
 
-    txt_file = request.files['txtFile']
-    messages = txt_file.read().decode().splitlines()
+    # Save the uploaded file
+    file_path = os.path.join('uploads', file.filename)
+    os.makedirs('uploads', exist_ok=True)
+    file.save(file_path)
 
-    def automation_task():
-        try:
-            post_url = f'https://graph.facebook.com/v15.0/{group_id}/'
-            for message in messages:
-                payload = {'message': f"{haters_name}: {message}", 'cookies': cookies}
-                response = requests.post(post_url, headers=headers, json=payload)
-                if response.ok:
-                    print(f"[SUCCESS] Sent message: {message}")
-                else:
-                    print(f"[FAILED] Message: {message}, Response: {response.text}")
-                time.sleep(delay)
-        except Exception as e:
-            print(f"Error: {e}")
-
-    thread = threading.Thread(target=automation_task)
-    active_threads.append(thread)
+    # Start a background thread for the automation
+    thread = Thread(target=facebook_automation, args=(cookies, target_group, file_path, hater_name, delay))
     thread.start()
 
     return redirect(url_for('index'))
 
-
-@app.route('/stop', methods=['POST'])
+@app.route('/stop')
 def stop_automation():
-    for thread in active_threads:
-        if thread.is_alive():
-            thread.join(timeout=1)
-    active_threads.clear()
-    print("[INFO] Automation stopped.")
-    return redirect(url_for('index'))
+    # Implement logic to stop the automation (use shared flags or manage threads)
+    return jsonify({"status": "Automation Stopped"}), 200
 
+def facebook_automation(cookies, target_group, file_path, hater_name, delay):
+    # Load Facebook cookies into the WebDriver
+    options = Options()
+    options.add_argument("--headless")  # Run in headless mode
+    driver = webdriver.Chrome(options=options)
+
+    driver.get('https://www.facebook.com/')
+    driver.add_cookie({'name': 'cookie_name', 'value': cookies})
+
+    driver.get(target_group)
+
+    # Read the message file
+    with open(file_path, 'r') as file:
+        messages = file.readlines()
+
+    # Send messages with delay
+    for message in messages:
+        # Find the message input field and send the message
+        message_box = driver.find_element_by_xpath("//textarea")
+        message_box.send_keys(f"{hater_name}: {message}")
+        
+        send_button = driver.find_element_by_xpath("//button[@type='submit']")
+        send_button.click()
+
+        time.sleep(delay)
+
+    driver.quit()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-            
+    app.run(debug=True, host='0.0.0.0', port=5000)
+        
