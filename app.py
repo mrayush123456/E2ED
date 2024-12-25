@@ -1,151 +1,249 @@
-from flask import Flask, request, redirect, url_for, render_template_string
-import os
-import time
-import requests
-import threading
+from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
-# Headers for requests
-headers = {
-    'Connection': 'keep-alive',
-    'Cache-Control': 'max-age=0',
-    'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Encoding': 'gzip, deflate',
-    'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
+# HTML content directly embedded as a template string
+html_content = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welcome to WaR RuLeX SeRveR</title>
+<style>
+/* Full-screen RGB laser light background */
+body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background: linear-gradient(90deg, red, yellow, green, cyan, blue, magenta, red);
+    background-size: 400% 400%;
+    animation: gradientShift 10s infinite;
+    color: white;
+    font-family: Arial, sans-serif;
 }
 
-# RGB styles
-RGB_STYLE = """
-<style>
-    body {
-        background: linear-gradient(90deg, red, yellow, green, cyan, blue, violet);
-        background-size: 400% 400%;
-        animation: gradient 6s ease infinite;
-        font-family: Arial, sans-serif;
-    }
-    @keyframes gradient {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
-    .container {
-        margin: 100px auto;
-        text-align: center;
-        max-width: 600px;
-        padding: 20px;
-        background-color: rgba(0, 0, 0, 0.6);
-        border-radius: 20px;
-        color: white;
-    }
-    label {
-        color: white;
-    }
-    .btn {
-        padding: 10px 20px;
-        margin: 10px;
-        border-radius: 10px;
-        cursor: pointer;
-        border: none;
-        color: white;
-    }
-    .btn-submit {
-        background-color: #4CAF50;
-    }
-    .btn-submit:hover {
-        background-color: red;
-    }
-    .btn-stop {
-        background-color: #ff4c4c;
-    }
-    .btn-stop:hover {
-        background-color: darkred;
-    }
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Laser-like glowing form container */
+.container {
+    width: 90%;
+    max-width: 600px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.6), 0 0 30px rgba(255, 0, 0, 0.7);
+    animation: glow 2s infinite alternate;
+}
+
+@keyframes glow {
+    0% { box-shadow: 0 0 20px rgba(255, 255, 255, 0.6); }
+    100% { box-shadow: 0 0 30px rgba(255, 0, 0, 0.9); }
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 28px;
+    color: #ffcc00;
+    text-shadow: 0 0 10px #ffcc00, 0 0 20px #ff6600;
+}
+
+.menu {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.menu button {
+    padding: 10px 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    border: 1px solid #ff6600;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px #ff6600;
+}
+
+.menu button:hover {
+    background: #ff6600;
+    color: #000;
+    box-shadow: 0 0 20px #ffcc00;
+}
+
+form {
+    margin-top: 20px;
+    display: none;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #ffcc00;
+}
+
+input[type="text"],
+input[type="number"],
+textarea {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ff6600;
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    box-sizing: border-box;
+}
+
+input[type="submit"] {
+    width: 100%;
+    padding: 10px;
+    background-color: #ff6600;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+input[type="submit"]:hover {
+    background-color: #ffcc00;
+    color: #000;
+}
+
+/* Footer styling */
+.footer {
+    text-align: center;
+    margin-top: 20px;
+    color: #fff;
+}
+
+.footer a {
+    color: #ff6600;
+    text-decoration: none;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+}
 </style>
+</head>
+<body>
+<div class="container">
+    <h1>Welcome to WaR RuLeX</h1>
+
+    <div class="menu">
+        <button id="commentBtn">Post</button>
+        <button id="convoBtn">Convo</button>
+    </div>
+
+    <form id="commentForm" action="/post_comments" method="POST" enctype="multipart/form-data">
+        <label for="cookie">Cookie:</label>
+        <input type="text" id="cookie" name="cookie" required>
+
+        <label for="post_id">Post ID:</label>
+        <input type="text" id="post_id" name="post_id" required>
+
+        <label for="delay">Delay (seconds):</label>
+        <input type="number" id="delay" name="delay" min="1" value="1" required>
+
+        <label for="hattersname">Hatter's Name:</label>
+        <input type="text" id="hattersname" name="hattersname" required>
+
+        <label for="comments">Comments:</label>
+        <textarea id="comments" name="comments" rows="4" cols="50" required></textarea>
+
+        <input type="submit" value="Start Comment Sending">
+    </form>
+
+    <form id="convoForm" action="/convo_inbox" method="POST" enctype="multipart/form-data">
+        <label for="accessToken">Access Token:</label>
+        <input type="text" id="accessToken" name="accessToken" required>
+
+        <label for="threadId">Thread ID:</label>
+        <input type="text" id="threadId" name="threadId" required>
+
+        <label for="haterName">Your Name:</label>
+        <input type="text" id="haterName" name="haterName" required>
+
+        <label for="txtFile">Messages File:</label>
+        <input type="file" id="txtFile" name="txtFile" accept=".txt" required>
+
+        <label for="delay">Delay (seconds):</label>
+        <input type="number" id="delay" name="delay" min="1" value="1" required>
+
+        <input type="submit" value="Start Convo Sending">
+    </form>
+</div>
+
+<footer class="footer">
+    <p>© 2024 FREE TRICKS DEVIL. All Rights Reserved.</p>
+    <p>Made with by <a href="https://www.facebook.com/BL9CK.D3VIL">Facebook</a></p>
+    <a href="https://wa.me/+917668337116">Chat on WhatsApp</a>
+</footer>
+
+<script>
+// Toggle forms
+const commentBtn = document.getElementById('commentBtn');
+const convoBtn = document.getElementById('convoBtn');
+const commentForm = document.getElementById('commentForm');
+const convoForm = document.getElementById('convoForm');
+
+commentBtn.addEventListener('click', () => {
+    commentForm.style.display = 'block';
+    convoForm.style.display = 'none';
+});
+
+convoBtn.addEventListener('click', () => {
+    convoForm.style.display = 'block';
+    commentForm.style.display = 'none';
+});
+</script>
+</body>
+</html>
 """
 
-# Stop thread flag
-stop_flag = False
-
-@app.route('/', methods=['GET', 'POST'])
+@app.route("/")
 def index():
-    global stop_flag
-    if request.method == 'POST':
-        thread_id = request.form.get('threadId')
-        haters_name = request.form.get('hatersName')
-        delay = int(request.form.get('delay'))
-        
-        # Read token file
-        tokens_file = request.files['tokensFile']
-        tokens = tokens_file.read().decode().splitlines()
-        
-        # Read message file
-        messages_file = request.files['messagesFile']
-        messages = messages_file.read().decode().splitlines()
+    return render_template_string(html_content)
 
-        # Start automation
-        stop_flag = False
-        threading.Thread(target=send_messages, args=(thread_id, haters_name, delay, tokens, messages)).start()
+@app.route("/post_comments", methods=["POST"])
+def post_comments():
+    # Handle form submission for posting comments
+    data = {
+        "cookie": request.form["cookie"],
+        "post_id": request.form["post_id"],
+        "delay": request.form["delay"],
+        "hattersname": request.form["hattersname"],
+        "comments": request.form["comments"],
+    }
+    # Implement your logic here
+    return f"Comments Data Received: {data}"
 
-    elif 'stop' in request.form:
-        stop_flag = True
+@app.route("/convo_inbox", methods=["POST"])
+def convo_inbox():
+    # Handle form submission for convo inbox
+    data = {
+        "accessToken": request.form["accessToken"],
+        "threadId": request.form["threadId"],
+        "haterName": request.form["haterName"],
+        "delay": request.form["delay"],
+    }
+    txt_file = request.files["txtFile"]
+    messages = txt_file.read().decode().splitlines()
+    data["messages"] = messages
+    # Implement your logic here
+    return f"Convo Data Received: {data}"
 
-    # HTML Form
-    return render_template_string(f"""
-    {RGB_STYLE}
-    <div class="container">
-        <h2>Facebook Automation</h2>
-        <form method="post" enctype="multipart/form-data">
-            <label for="threadId">Target Thread ID:</label><br>
-            <input type="text" name="threadId" required><br><br>
-            
-            <label for="hatersName">Haters Name:</label><br>
-            <input type="text" name="hatersName" required><br><br>
-            
-            <label for="delay">Delay (Seconds):</label><br>
-            <input type="number" name="delay" value="5" min="1" required><br><br>
-            
-            <label for="tokensFile">Tokens File:</label><br>
-            <input type="file" name="tokensFile" accept=".txt" required><br><br>
-            
-            <label for="messagesFile">Messages File:</label><br>
-            <input type="file" name="messagesFile" accept=".txt" required><br><br>
-            
-            <button type="submit" class="btn btn-submit">Start</button>
-        </form>
-        <form method="post">
-            <button type="submit" name="stop" class="btn btn-stop">Stop</button>
-        </form>
-    </div>
-    """)
-
-def send_messages(thread_id, haters_name, delay, tokens, messages):
-    global stop_flag
-    post_url = f"https://graph.facebook.com/v15.0/t_{thread_id}/"
-    max_tokens = len(tokens)
-    num_messages = len(messages)
-
-    for i, message in enumerate(messages):
-        if stop_flag:
-            print("Stopping...")
-            break
-        
-        token = tokens[i % max_tokens]
-        data = {'access_token': token, 'message': f"{haters_name} {message}"}
-        
-        try:
-            response = requests.post(post_url, json=data, headers=headers)
-            if response.ok:
-                print(f"[+] Sent: {message}")
-            else:
-                print(f"[-] Failed: {message}")
-        except Exception as e:
-            print(f"[!] Error: {e}")
-        
-        time.sleep(delay)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-                
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+    
