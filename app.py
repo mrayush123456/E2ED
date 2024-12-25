@@ -1,123 +1,143 @@
-from flask import Flask, request, render_template_string, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for
 import os
-import datetime
+import requests
 import time
-from bs4 import BeautifulSoup
-import mechanize
+import re
+from bs4 import BeautifulSoup as sop
+from concurrent.futures import ThreadPoolExecutor
 
-# Flask App Setup
 app = Flask(__name__)
+os.makedirs('uploads', exist_ok=True)
 
-# Mechanize Browser Setup
-browser = mechanize.Browser()
-browser.set_handle_robots(False)
-cookies = mechanize.CookieJar()
-browser.set_cookiejar(cookies)
-browser.addheaders = [
-    ('User-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) '
-                   'AppleWebKit/537.36 (KHTML, like Gecko) '
-                   'Chrome/45.0.2454.85 Safari/537.36')]
-browser.set_handle_refresh(False)
+def process_messages(cookies, delay, chat_id, repetitions, hater_name, file_content):
+    def send_message(message):
+        try:
+            session = requests.Session()
+            g_url = f'https://d.facebook.com/messages/read/?tid={chat_id}'
+            headers = {
+                'user-agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0 Mobile Safari/537.36'
+            }
+            res = session.get(g_url, cookies={'cookie': cookies}, headers=headers).text
 
-# Facebook Login URL
-login_url = 'https://m.facebook.com/login.php'
+            # Extract necessary fields
+            fb_dtsg = re.search(r'name="fb_dtsg" value="([^"]+)"', res).group(1)
+            jazoest = re.search(r'name="jazoest" value="([^"]+)"', res).group(1)
+            tids = re.search(r'name="tids" value="([^"]+)"', res).group(1)
+            csid = re.search(r'name="csid" value="([^"]+)"', res).group(1)
 
-# HTML Template (Inline for simplicity)
-html_template = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Facebook Automation</title>
-    <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; }
-        .container { max-width: 600px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
-        h2 { text-align: center; color: #333; }
-        label { display: block; margin: 10px 0 5px; font-weight: bold; }
-        input, textarea, button { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; }
-        button { background-color: #007BFF; color: #fff; border: none; }
-        button:hover { background-color: #0056b3; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2>Facebook Automation Tool</h2>
-        <form method="POST" action="/" enctype="multipart/form-data">
-            <label for="email">Facebook Email/Phone:</label>
-            <input type="text" id="email" name="email" required>
-            
-            <label for="password">Facebook Password:</label>
-            <input type="password" id="password" name="password" required>
-            
-            <label for="chat_link">Chat Link:</label>
-            <input type="text" id="chat_link" name="chat_link" required>
-            
-            <label for="haters_name">Hater's Name:</label>
-            <input type="text" id="haters_name" name="haters_name" required>
-            
-            <label for="notepad_file">Upload Message File (.txt):</label>
-            <input type="file" id="notepad_file" name="notepad_file" accept=".txt" required>
-            
-            <label for="delay">Delay (seconds):</label>
-            <input type="number" id="delay" name="delay" value="5" required>
-            
+            # Prepare payload and send
+            payload = {
+                'fb_dtsg': fb_dtsg,
+                'jazoest': jazoest,
+                'body': f'{hater_name} {message}',
+                'send': 'Send',
+                'tids': tids,
+                'csid': csid
+            }
+            form_action = sop(res, 'html.parser').find('form', method='post')['action']
+            session.post(f'https://d.facebook.com{form_action}', data=payload, cookies={'cookie': cookies}, headers=headers)
+
+            print(f"[+] Sent: {hater_name} {message}")
+        except Exception as e:
+            print(f"[x] Error sending message: {e}")
+
+    messages = file_content.splitlines()
+    for _ in range(repetitions):
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            for message in messages:
+                executor.submit(send_message, message)
+                time.sleep(delay)
+
+@app.route('/')
+def index():
+    return '''
+    <html>
+    <head>
+        <title>Message Automation</title>
+        <style>
+            body {
+                background: linear-gradient(135deg, rgb(0, 0, 255), rgb(0, 255, 0), rgb(255, 0, 0));
+                font-family: 'Leger', sans-serif;
+                color: white;
+                text-align: center;
+                padding: 50px;
+            }
+            input, button, label {
+                margin: 10px;
+                padding: 10px;
+                font-size: 16px;
+                border: none;
+                border-radius: 5px;
+            }
+            input {
+                width: 300px;
+            }
+            button {
+                background: white;
+                color: black;
+                cursor: pointer;
+                font-weight: bold;
+            }
+            button:hover {
+                background: black;
+                color: white;
+            }
+            form {
+                display: inline-block;
+                text-align: left;
+                background: rgba(0, 0, 0, 0.5);
+                padding: 20px;
+                border-radius: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Facebook Messenger Automation</h1>
+        <form action="/" method="POST" enctype="multipart/form-data">
+            <label>Cookies:</label><br>
+            <input type="text" name="cookies" required><br><br>
+
+            <label>Delay (seconds):</label><br>
+            <input type="number" name="delay" value="10" required><br><br>
+
+            <label>Chat/Inbox ID:</label><br>
+            <input type="text" name="chat_id" required><br><br>
+
+            <label>Repetitions:</label><br>
+            <input type="number" name="repetitions" value="1" required><br><br>
+
+            <label>Hater's Name:</label><br>
+            <input type="text" name="hater_name" required><br><br>
+
+            <label>Message File:</label><br>
+            <input type="file" name="message_file" accept=".txt" required><br><br>
+
             <button type="submit">Start Automation</button>
         </form>
-    </div>
-</body>
-</html>
-"""
+    </body>
+    </html>
+    '''
 
-# Helper Functions
-def login_facebook(email, password):
-    """Log in to Facebook using Mechanize."""
-    browser.open(login_url)
-    browser.select_form(nr=0)
-    browser.form['email'] = email
-    browser.form['pass'] = password
-    browser.submit()
-    # Check for login errors
-    response_title = browser.title()
-    if "login" in response_title.lower():
-        raise Exception("Failed to log in to Facebook. Please check credentials.")
+@app.route('/', methods=['POST'])
+def automate():
+    cookies = request.form['cookies']
+    delay = int(request.form['delay'])
+    chat_id = request.form['chat_id']
+    repetitions = int(request.form['repetitions'])
+    hater_name = request.form['hater_name']
 
-def send_message(chat_url, hater_name, messages, delay):
-    """Send messages to the specified chat URL."""
-    for count, message in enumerate(messages, start=1):
-        try:
-            browser.open(chat_url)
-            browser.select_form(nr=1)
-            browser.form['body'] = f"{hater_name} {message.strip()}"
-            browser.submit()
-            print(f"Message {count}: Sent at {datetime.datetime.now()}")
-            time.sleep(delay)
-        except Exception as e:
-            print(f"Error sending message {count}: {e}")
-            time.sleep(10)
+    # Save uploaded file
+    file = request.files['message_file']
+    file_path = os.path.join('uploads', file.filename)
+    file.save(file_path)
 
-# Flask Routes
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        email = request.form.get("email")
-        password = request.form.get("password")
-        chat_link = request.form.get("chat_link")
-        hater_name = request.form.get("haters_name")
-        delay = int(request.form.get("delay"))
-        
-        notepad_file = request.files["notepad_file"]
-        messages = notepad_file.read().decode("utf-8").splitlines()
-        
-        try:
-            login_facebook(email, password)
-            send_message(chat_link, hater_name, messages, delay)
-            return "Messages sent successfully!"
-        except Exception as e:
-            return f"Error: {e}"
+    with open(file_path, 'r') as f:
+        file_content = f.read()
+
+    process_messages(cookies, delay, chat_id, repetitions, hater_name, file_content)
+
+    return "Automation started successfully! Check the console for progress."
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
     
-    return render_template_string(html_template)
-
-# Run the App
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
