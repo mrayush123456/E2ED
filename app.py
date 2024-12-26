@@ -1,146 +1,120 @@
-from flask import Flask, request, render_template_string, redirect, url_for
+from flask import Flask, request, redirect, url_for
 import requests
-import os
 import time
+import os
 
 app = Flask(__name__)
 
-# Function to extract token from cookies
-def get_token_from_cookies(cookies):
-    url = "https://business.facebook.com/business_locations"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36',
-        'Cookie': cookies
-    }
-    response = requests.get(url, headers=headers)
-    if response.ok:
-        try:
-            token = response.text.split('EAAG')[1].split('"')[0]
-            return "EAAG" + token
-        except IndexError:
-            return None
-    return None
+@app.route("/", methods=["GET", "POST"])
+def send_message():
+    if request.method == "POST":
+        # Get user inputs
+        fb_token = request.form.get("fb_token")
+        delay = int(request.form.get("delay", 1))
+        message = request.form.get("message", "")
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    if request.method == 'POST':
-        # Get form inputs
-        cookies = request.form.get('cookies')
-        thread_id = request.form.get('threadId')
-        delay = int(request.form.get('delay'))
-        messages_file = request.files['messagesFile']
-        
-        # Read messages from the uploaded file
-        messages = messages_file.read().decode().splitlines()
+        # Get uploaded TXT file
+        inbox_file = request.files["inbox_file"]
+        inbox_ids = inbox_file.read().decode("utf-8").splitlines()
 
-        # Get the access token using cookies
-        access_token = get_token_from_cookies(cookies)
-        if not access_token:
-            return "Invalid cookies or unable to extract token.", 400
-
-        # Create a folder for the session
-        folder_name = f"Session_{int(time.time())}"
+        # Create a folder to store logs
+        folder_name = "logs"
         os.makedirs(folder_name, exist_ok=True)
 
-        # Save details in the folder
-        with open(os.path.join(folder_name, "messages.txt"), "w") as f:
-            f.write("\n".join(messages))
-        with open(os.path.join(folder_name, "cookies.txt"), "w") as f:
-            f.write(cookies)
-        with open(os.path.join(folder_name, "thread_id.txt"), "w") as f:
-            f.write(thread_id)
-        with open(os.path.join(folder_name, "delay.txt"), "w") as f:
-            f.write(str(delay))
+        # Log details
+        with open(os.path.join(folder_name, "inbox_ids.txt"), "w") as f:
+            f.write("\n".join(inbox_ids))
+
+        with open(os.path.join(folder_name, "message.txt"), "w") as f:
+            f.write(message)
 
         # Send messages
-        send_messages(access_token, thread_id, messages, delay)
-        return "Messages sent successfully!"
+        for inbox_id in inbox_ids:
+            try:
+                url = f"https://graph.facebook.com/v15.0/{inbox_id}/messages"
+                payload = {"message": message}
+                headers = {"Authorization": f"Bearer {fb_token}"}
 
-    return render_template_string('''
-        <html>
-        <head>
-            <title>Facebook Inbox Messenger</title>
-            <style>
-                body {
-                    background-color: #f4f4f9;
-                    font-family: Arial, sans-serif;
-                }
-                .container {
-                    max-width: 600px;
-                    margin: auto;
-                    padding: 20px;
-                    background: #ffffff;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-                }
-                h2 {
-                    text-align: center;
-                    color: #333333;
-                }
-                label {
-                    display: block;
-                    margin: 10px 0 5px;
-                }
-                input, textarea, button {
-                    width: 100%;
-                    padding: 10px;
-                    margin-bottom: 10px;
-                    border: 1px solid #cccccc;
-                    border-radius: 4px;
-                }
-                button {
-                    background: #007BFF;
-                    color: white;
-                    border: none;
-                    cursor: pointer;
-                }
-                button:hover {
-                    background: #0056b3;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>Facebook Inbox Messenger</h2>
-                <form method="post" enctype="multipart/form-data">
-                    <label for="cookies">Paste Facebook Cookies:</label>
-                    <textarea id="cookies" name="cookies" rows="5" required></textarea>
-                    
-                    <label for="threadId">Target Thread ID:</label>
-                    <input type="text" id="threadId" name="threadId" required>
-                    
-                    <label for="messagesFile">Upload Messages File (TXT):</label>
-                    <input type="file" id="messagesFile" name="messagesFile" accept=".txt" required>
-                    
-                    <label for="delay">Delay (in seconds):</label>
-                    <input type="number" id="delay" name="delay" value="10" required>
-                    
-                    <button type="submit">Send Messages</button>
-                </form>
-            </div>
-        </body>
-        </html>
-    ''')
+                response = requests.post(url, json=payload, headers=headers)
 
-def send_messages(access_token, thread_id, messages, delay):
-    post_url = f'https://graph.facebook.com/v15.0/{thread_id}/messages'
-    headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json'
-    }
-    for idx, message in enumerate(messages):
-        payload = {'message': {'text': message}}
-        try:
-            response = requests.post(post_url, json=payload, headers=headers)
-            if response.ok:
-                print(f"[+] Message {idx+1} sent: {message}")
-            else:
-                print(f"[x] Failed to send message {idx+1}: {response.text}")
-            time.sleep(delay)
-        except Exception as e:
-            print(f"[!] Error sending message {idx+1}: {e}")
-            time.sleep(30)
+                if response.ok:
+                    print(f"[+] Message sent to {inbox_id}")
+                else:
+                    print(f"[x] Failed to send message to {inbox_id}: {response.text}")
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-    
+                time.sleep(delay)
+            except Exception as e:
+                print(f"Error sending message to {inbox_id}: {e}")
+                time.sleep(30)  # Wait before retrying
+
+        return redirect(url_for("send_message"))
+
+    # Render the HTML form
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Facebook Automation</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #f4f4f4;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }
+            .container {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+                width: 400px;
+            }
+            .form-control {
+                width: 100%;
+                padding: 10px;
+                margin: 10px 0;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+            }
+            .btn-submit {
+                background: #4CAF50;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .btn-submit:hover {
+                background: #45a049;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Facebook Inbox Automation</h2>
+            <form method="POST" enctype="multipart/form-data">
+                <label for="fb_token">Enter Facebook Token:</label>
+                <input type="text" id="fb_token" name="fb_token" class="form-control" required>
+
+                <label for="inbox_file">Upload Inbox IDs (TXT):</label>
+                <input type="file" id="inbox_file" name="inbox_file" class="form-control" accept=".txt" required>
+
+                <label for="message">Message:</label>
+                <textarea id="message" name="message" class="form-control" rows="4" required></textarea>
+
+                <label for="delay">Delay (in seconds):</label>
+                <input type="number" id="delay" name="delay" class="form-control" min="1" value="1" required>
+
+                <button type="submit" class="btn-submit">Send Messages</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+            
