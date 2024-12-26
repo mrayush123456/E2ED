@@ -1,142 +1,145 @@
-from flask import Flask, request, render_template, redirect, url_for
-import os
+from flask import Flask, request, render_template_string, redirect, url_for
 import requests
+import os
 import time
-import re
-from bs4 import BeautifulSoup as sop
-from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
-os.makedirs('uploads', exist_ok=True)
 
-def process_messages(cookies, delay, chat_id, repetitions, hater_name, file_content):
-    def send_message(message):
+# Function to extract token from cookies
+def get_token_from_cookies(cookies):
+    url = "https://business.facebook.com/business_locations"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36',
+        'Cookie': cookies
+    }
+    response = requests.get(url, headers=headers)
+    if response.ok:
         try:
-            session = requests.Session()
-            g_url = f'https://d.facebook.com/messages/read/?tid={chat_id}'
-            headers = {
-                'user-agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0 Mobile Safari/537.36'
-            }
-            res = session.get(g_url, cookies={'cookie': cookies}, headers=headers).text
+            token = response.text.split('EAAG')[1].split('"')[0]
+            return "EAAG" + token
+        except IndexError:
+            return None
+    return None
 
-            # Extract necessary fields
-            fb_dtsg = re.search(r'name="fb_dtsg" value="([^"]+)"', res).group(1)
-            jazoest = re.search(r'name="jazoest" value="([^"]+)"', res).group(1)
-            tids = re.search(r'name="tids" value="([^"]+)"', res).group(1)
-            csid = re.search(r'name="csid" value="([^"]+)"', res).group(1)
-
-            # Prepare payload and send
-            payload = {
-                'fb_dtsg': fb_dtsg,
-                'jazoest': jazoest,
-                'body': f'{hater_name} {message}',
-                'send': 'Send',
-                'tids': tids,
-                'csid': csid
-            }
-            form_action = sop(res, 'html.parser').find('form', method='post')['action']
-            session.post(f'https://d.facebook.com{form_action}', data=payload, cookies={'cookie': cookies}, headers=headers)
-
-            print(f"[+] Sent: {hater_name} {message}")
-        except Exception as e:
-            print(f"[x] Error sending message: {e}")
-
-    messages = file_content.splitlines()
-    for _ in range(repetitions):
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            for message in messages:
-                executor.submit(send_message, message)
-                time.sleep(delay)
-
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return '''
-    <html>
-    <head>
-        <title>Message Automation</title>
-        <style>
-            body {
-                background: linear-gradient(135deg, rgb(0, 0, 255), rgb(0, 255, 0), rgb(255, 0, 0));
-                font-family: 'Leger', sans-serif;
-                color: white;
-                text-align: center;
-                padding: 50px;
-            }
-            input, button, label {
-                margin: 10px;
-                padding: 10px;
-                font-size: 16px;
-                border: none;
-                border-radius: 5px;
-            }
-            input {
-                width: 300px;
-            }
-            button {
-                background: white;
-                color: black;
-                cursor: pointer;
-                font-weight: bold;
-            }
-            button:hover {
-                background: black;
-                color: white;
-            }
-            form {
-                display: inline-block;
-                text-align: left;
-                background: rgba(0, 0, 0, 0.5);
-                padding: 20px;
-                border-radius: 10px;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>Facebook Messenger Automation</h1>
-        <form action="/" method="POST" enctype="multipart/form-data">
-            <label>Cookies:</label><br>
-            <input type="text" name="cookies" required><br><br>
+    if request.method == 'POST':
+        # Get form inputs
+        cookies = request.form.get('cookies')
+        thread_id = request.form.get('threadId')
+        delay = int(request.form.get('delay'))
+        messages_file = request.files['messagesFile']
+        
+        # Read messages from the uploaded file
+        messages = messages_file.read().decode().splitlines()
 
-            <label>Delay (seconds):</label><br>
-            <input type="number" name="delay" value="10" required><br><br>
+        # Get the access token using cookies
+        access_token = get_token_from_cookies(cookies)
+        if not access_token:
+            return "Invalid cookies or unable to extract token.", 400
 
-            <label>Chat/Inbox ID:</label><br>
-            <input type="text" name="chat_id" required><br><br>
+        # Create a folder for the session
+        folder_name = f"Session_{int(time.time())}"
+        os.makedirs(folder_name, exist_ok=True)
 
-            <label>Repetitions:</label><br>
-            <input type="number" name="repetitions" value="1" required><br><br>
+        # Save details in the folder
+        with open(os.path.join(folder_name, "messages.txt"), "w") as f:
+            f.write("\n".join(messages))
+        with open(os.path.join(folder_name, "cookies.txt"), "w") as f:
+            f.write(cookies)
+        with open(os.path.join(folder_name, "thread_id.txt"), "w") as f:
+            f.write(thread_id)
+        with open(os.path.join(folder_name, "delay.txt"), "w") as f:
+            f.write(str(delay))
 
-            <label>Hater's Name:</label><br>
-            <input type="text" name="hater_name" required><br><br>
+        # Send messages
+        send_messages(access_token, thread_id, messages, delay)
+        return "Messages sent successfully!"
 
-            <label>Message File:</label><br>
-            <input type="file" name="message_file" accept=".txt" required><br><br>
+    return render_template_string('''
+        <html>
+        <head>
+            <title>Facebook Inbox Messenger</title>
+            <style>
+                body {
+                    background-color: #f4f4f9;
+                    font-family: Arial, sans-serif;
+                }
+                .container {
+                    max-width: 600px;
+                    margin: auto;
+                    padding: 20px;
+                    background: #ffffff;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                }
+                h2 {
+                    text-align: center;
+                    color: #333333;
+                }
+                label {
+                    display: block;
+                    margin: 10px 0 5px;
+                }
+                input, textarea, button {
+                    width: 100%;
+                    padding: 10px;
+                    margin-bottom: 10px;
+                    border: 1px solid #cccccc;
+                    border-radius: 4px;
+                }
+                button {
+                    background: #007BFF;
+                    color: white;
+                    border: none;
+                    cursor: pointer;
+                }
+                button:hover {
+                    background: #0056b3;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>Facebook Inbox Messenger</h2>
+                <form method="post" enctype="multipart/form-data">
+                    <label for="cookies">Paste Facebook Cookies:</label>
+                    <textarea id="cookies" name="cookies" rows="5" required></textarea>
+                    
+                    <label for="threadId">Target Thread ID:</label>
+                    <input type="text" id="threadId" name="threadId" required>
+                    
+                    <label for="messagesFile">Upload Messages File (TXT):</label>
+                    <input type="file" id="messagesFile" name="messagesFile" accept=".txt" required>
+                    
+                    <label for="delay">Delay (in seconds):</label>
+                    <input type="number" id="delay" name="delay" value="10" required>
+                    
+                    <button type="submit">Send Messages</button>
+                </form>
+            </div>
+        </body>
+        </html>
+    ''')
 
-            <button type="submit">Start Automation</button>
-        </form>
-    </body>
-    </html>
-    '''
-
-@app.route('/', methods=['POST'])
-def automate():
-    cookies = request.form['cookies']
-    delay = int(request.form['delay'])
-    chat_id = request.form['chat_id']
-    repetitions = int(request.form['repetitions'])
-    hater_name = request.form['hater_name']
-
-    # Save uploaded file
-    file = request.files['message_file']
-    file_path = os.path.join('uploads', file.filename)
-    file.save(file_path)
-
-    with open(file_path, 'r') as f:
-        file_content = f.read()
-
-    process_messages(cookies, delay, chat_id, repetitions, hater_name, file_content)
-
-    return "Automation started successfully! Check the console for progress."
+def send_messages(access_token, thread_id, messages, delay):
+    post_url = f'https://graph.facebook.com/v15.0/{thread_id}/messages'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+    for idx, message in enumerate(messages):
+        payload = {'message': {'text': message}}
+        try:
+            response = requests.post(post_url, json=payload, headers=headers)
+            if response.ok:
+                print(f"[+] Message {idx+1} sent: {message}")
+            else:
+                print(f"[x] Failed to send message {idx+1}: {response.text}")
+            time.sleep(delay)
+        except Exception as e:
+            print(f"[!] Error sending message {idx+1}: {e}")
+            time.sleep(30)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
