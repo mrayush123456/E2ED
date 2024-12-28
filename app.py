@@ -1,9 +1,10 @@
-from flask import Flask, request, render_template_string, flash, redirect, url_for, jsonify
+from flask import Flask, request, render_template_string, jsonify, redirect, url_for, flash
+import re
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key"
 
-# HTML Template Embedded in Python
+# HTML Template for the Web Page
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -105,13 +106,18 @@ HTML_TEMPLATE = '''
     <div class="container">
         <h1>Extractor 2.0</h1>
         <h2>Get Tokens Free</h2>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="{{ category }}">{{ message }}</div>
-            {% endfor %}
+        {% if token %}
+            <div class="card">
+                <h2>Your Token:</h2>
+                <pre>{{ token }}</pre>
+            </div>
         {% endif %}
-        {% endwith %}
+        {% if error %}
+            <div class="card" style="color: red;">
+                <h2>Error:</h2>
+                <pre>{{ error }}</pre>
+            </div>
+        {% endif %}
         <form method="post">
             <div class="form-group">
                 <label for="cookies">Paste your JSON Cookies:</label>
@@ -119,42 +125,39 @@ HTML_TEMPLATE = '''
             </div>
             <input type="submit" value="Get Token">
         </form>
-        {% if token %}
-        <div class="card">
-            <h2>Extracted Token:</h2>
-            <pre>{{ token }}</pre>
-        </div>
-        {% endif %}
     </div>
 </body>
 </html>
 '''
 
-# Helper Function to Extract Tokens
-def extract_token_from_cookies(cookies_json):
+# Function to Extract Token
+def extract_token_from_cookies(cookies):
     """
-    Extract 'sessionid' or similar token from the provided cookies JSON.
+    Extracts a token from JSON cookies.
     """
     try:
-        cookies = jsonify(eval(cookies_json)).json  # Convert string to JSON safely
-        token = cookies.get("sessionid", None)  # Instagram tokens are often in 'sessionid'
+        # Parse cookies (assuming they are JSON)
+        cookie_dict = eval(cookies)  # Convert string to dict (use ast.literal_eval for safety in real apps)
+        token = cookie_dict.get("sessionid", "Token not found")
         return token
     except Exception as e:
-        return None
+        raise ValueError("Invalid JSON format") from e
 
-# Flask Routes
 @app.route("/", methods=["GET", "POST"])
-def home():
+def get_token():
     token = None
+    error = None
+
     if request.method == "POST":
-        cookies = request.form.get("cookies", "").strip()
-        token = extract_token_from_cookies(cookies)
-        if token:
-            flash("Token extracted successfully!", "success")
-        else:
-            flash("Failed to extract a valid token.", "error")
-    return render_template_string(HTML_TEMPLATE, token=token)
+        try:
+            cookies = request.form.get("cookies")
+            token = extract_token_from_cookies(cookies)
+        except Exception as e:
+            error = str(e)
+
+    return render_template_string(HTML_TEMPLATE, token=token, error=error)
 
 # Run Flask App
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+    
