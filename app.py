@@ -1,132 +1,147 @@
-from flask import Flask, request, render_template_string, jsonify, redirect, url_for, flash
-import re
+from flask import Flask, request, jsonify, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "your_secret_key"
 
-# HTML Template
-HTML_TEMPLATE = '''
+# HTML Template as a Python string
+HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Utility Tools</title>
+    <title>Cookies to JSON Converter</title>
     <style>
+        /* Global Styles */
         body {
             font-family: Arial, sans-serif;
-            background: linear-gradient(to right, #ff7e5f, #feb47b);
+            background: linear-gradient(to right, #f953c6, #b91d73);
+            color: #fff;
             margin: 0;
             padding: 20px;
-            color: #333;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
+
         h1 {
             text-align: center;
-            color: #333;
+            color: #fff;
+            font-size: 2.5em;
         }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
         label {
             font-weight: bold;
             margin-top: 10px;
             display: block;
+            color: #ffebf1;
         }
-        textarea, input {
+
+        textarea {
             width: 100%;
+            height: 100px;
             padding: 10px;
-            margin-top: 5px;
             border: 1px solid #ddd;
-            border-radius: 5px;
+            border-radius: 8px;
+            margin-top: 5px;
             box-sizing: border-box;
+            font-size: 1em;
+            color: #333;
         }
+
         button {
-            background: linear-gradient(to right, #ff416c, #ff4b2b);
+            background: linear-gradient(to right, #f953c6, #b91d73);
             color: white;
-            padding: 10px 20px;
+            padding: 10px 15px;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
-            margin-top: 10px;
+            margin-top: 15px;
             width: 100%;
+            font-size: 1.2em;
+            transition: transform 0.3s;
         }
+
         button:hover {
-            background: linear-gradient(to right, #ff4b2b, #ff416c);
+            background: linear-gradient(to right, #b91d73, #f953c6);
+            transform: scale(1.05);
         }
+
+        h2 {
+            margin-top: 20px;
+            font-size: 1.5em;
+        }
+
         pre {
-            background: #f9f9f9;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
             padding: 10px;
-            border-radius: 5px;
+            border-radius: 8px;
             overflow-x: auto;
+            font-size: 1em;
         }
-        .success {
-            color: green;
-            margin-bottom: 10px;
+
+        .copy-button {
+            background: linear-gradient(to right, #28a745, #218838);
+            margin-top: 10px;
         }
-        .error {
-            color: red;
-            margin-bottom: 10px;
+
+        .copy-button:hover {
+            background: linear-gradient(to right, #218838, #28a745);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Utility Tools</h1>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="{{ category }}">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-        {% endwith %}
-
-        <!-- Cookie to JSON -->
-        <form action="/cookie-to-json" method="POST">
-            <label for="cookieInput">Convert Cookie to JSON:</label>
-            <textarea id="cookieInput" name="cookie" placeholder="Paste cookies here..." required></textarea>
+        <h1>Cookies to JSON Converter</h1>
+        <form id="cookieForm">
+            <label for="cookies">Paste Your Simple Cookie Here:</label>
+            <textarea id="cookies" name="cookies" placeholder="datr=V7QPZzH8-GBiYnbp3ZkAksOB; sb=V7QPZwHEDTWR226ath-V0gBi;"></textarea>
             <button type="submit">Convert to JSON</button>
         </form>
-        
-        <h3>JSON Output:</h3>
-        <pre>{{ cookie_json }}</pre>
-
-        <hr>
-
-        <!-- Instagram Token Extractor -->
-        <form action="/extract-token" method="POST">
-            <label for="urlInput">Extract Instagram Token:</label>
-            <textarea id="urlInput" name="url" placeholder="Paste Instagram URL with token..." required></textarea>
-            <button type="submit">Extract Token</button>
-        </form>
-
-        <h3>Token Output:</h3>
-        <pre>{{ token }}</pre>
-
-        <hr>
-
-        <!-- JSON Converter -->
-        <form action="/convert-to-json" method="POST">
-            <label for="textInput">Convert Text to JSON:</label>
-            <textarea id="textInput" name="text" placeholder="Enter text here..." required></textarea>
-            <button type="submit">Convert to JSON</button>
-        </form>
-
-        <h3>Converted JSON:</h3>
-        <pre>{{ json_output }}</pre>
+        <h2>JSON Result:</h2>
+        <pre id="jsonOutput"></pre>
+        <button id="copyButton" class="copy-button" style="display:none;">Copy to Clipboard</button>
     </div>
+
+    <script>
+        document.getElementById('cookieForm').onsubmit = async function(event) {
+            event.preventDefault();
+            const cookies = document.getElementById('cookies').value;
+            const response = await fetch('/convert', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({ cookies })
+            });
+            const jsonOutput = await response.json();
+            document.getElementById('jsonOutput').textContent = JSON.stringify(jsonOutput, null, 4);
+            document.getElementById('copyButton').style.display = 'block'; // Show button
+        }
+
+        document.getElementById('copyButton').onclick = function() {
+            const jsonText = document.getElementById('jsonOutput').textContent;
+            navigator.clipboard.writeText(jsonText).then(() => {
+                alert('JSON copied successfully!');
+            }).catch(err => {
+                alert('Error copying JSON: ', err);
+            });
+        }
+    </script>
 </body>
 </html>
-'''
+"""
 
-# Utility Functions
+# Utility function to parse cookies
 def parse_cookies(cookie_string):
     """
-    Parse cookies into JSON format.
+    Parse cookies into a dictionary format.
     """
     cookies = {}
     for pair in cookie_string.split(";"):
@@ -135,56 +150,21 @@ def parse_cookies(cookie_string):
             cookies[key.strip()] = value.strip()
     return cookies
 
-def extract_instagram_token(url):
-    """
-    Extract token from Instagram URL or string.
-    """
-    match = re.search(r"access_token=([a-zA-Z0-9_\-]+)", url)
-    if match:
-        return match.group(1)
-    return None
-
 # Flask Routes
 @app.route("/", methods=["GET"])
 def home():
-    return render_template_string(HTML_TEMPLATE, cookie_json="", token="", json_output="")
+    return render_template_string(HTML_TEMPLATE)
 
-@app.route("/cookie-to-json", methods=["POST"])
-def cookie_to_json():
+@app.route("/convert", methods=["POST"])
+def convert():
     try:
-        cookie_string = request.form["cookie"]
-        cookies = parse_cookies(cookie_string)
-        return render_template_string(HTML_TEMPLATE, cookie_json=jsonify(cookies).get_data(as_text=True), token="", json_output="")
+        cookies = request.form.get("cookies", "")
+        parsed_cookies = parse_cookies(cookies)
+        return jsonify(parsed_cookies)
     except Exception as e:
-        flash(f"Error: {e}", "error")
-        return redirect(url_for("home"))
-
-@app.route("/extract-token", methods=["POST"])
-def extract_token():
-    try:
-        url = request.form["url"]
-        token = extract_instagram_token(url)
-        if token:
-            flash("Token extracted successfully!", "success")
-            return render_template_string(HTML_TEMPLATE, cookie_json="", token=token, json_output="")
-        else:
-            flash("No token found in the provided URL or string.", "error")
-            return redirect(url_for("home"))
-    except Exception as e:
-        flash(f"Error: {e}", "error")
-        return redirect(url_for("home"))
-
-@app.route("/convert-to-json", methods=["POST"])
-def convert_to_json():
-    try:
-        raw_text = request.form["text"]
-        json_output = parse_cookies(raw_text)
-        return render_template_string(HTML_TEMPLATE, cookie_json="", token="", json_output=jsonify(json_output).get_data(as_text=True))
-    except Exception as e:
-        flash(f"Error: {e}", "error")
-        return redirect(url_for("home"))
+        return jsonify({"error": str(e)}), 400
 
 # Run the Flask app
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-        
+    
