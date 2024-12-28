@@ -1,90 +1,86 @@
-from flask import Flask, request, redirect, url_for
-import os
-import time
-import requests
+from flask import Flask, request, jsonify, render_template_string
 
 app = Flask(__name__)
 
-# Static headers for requests
-headers = {
-    'Connection': 'keep-alive',
-    'Cache-Control': 'max-age=0',
-    'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Encoding': 'gzip, deflate',
-    'Accept-Language': 'en-US,en;q=0.9'
-}
+# HTML code as a template string
+html_code = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cookies to JSON Converter</title>
+    <style>
+        /* Global Styles */
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(to right, #f953c6, #b91d73);
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+        }
+        /* Rest of your CSS styles */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JSON Converter</h1>
+        <h2>Vists: <span id="visitorCount">1555</span></h2>
+        <form id="cookieForm">
+            <label for="cookies">Paste Your Simple Cookie Here:</label>
+            <textarea id="cookies" name="cookies" placeholder="datr=V7QPZzH8-GBiYnbp3ZkAksOB; sb=V7QPZwHEDTWR226ath-V0gBi;"></textarea>
+            <button type="submit">Convert to JSON</button>
+        </form>
+        <h2>JSON Result:</h2>
+        <pre id="jsonOutput"></pre>
+        <button id="copyButton" class="copy-button" style="display:none;">Copy to Clipboard</button>
+    </div>
+    <script>
+        document.getElementById('cookieForm').onsubmit = async function(event) {
+            event.preventDefault();
+            const cookies = document.getElementById('cookies').value;
+            const response = await fetch('/convert', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({ cookies })
+            });
+            const jsonOutput = await response.json();
+            document.getElementById('jsonOutput').textContent = JSON.stringify(jsonOutput, null, 4);
+            document.getElementById('copyButton').style.display = 'block';
+        }
+        document.getElementById('copyButton').onclick = function() {
+            const jsonText = document.getElementById('jsonOutput').textContent;
+            navigator.clipboard.writeText(jsonText).then(() => {
+                alert('JSON copied successfully!');
+            }).catch(err => {
+                alert('Error copying JSON: ', err);
+            });
+        }
+    </script>
+</body>
+</html>
+"""
 
 @app.route('/')
-def index():
-    return '''
-    <html>
-    <head>
-        <title>Facebook Cookie Message Sender</title>
-    </head>
-    <body>
-        <h1>Facebook Inbox Message Sender</h1>
-        <form action="/" method="post" enctype="multipart/form-data">
-            <label for="cookie">Enter Facebook Cookie:</label>
-            <textarea name="cookie" id="cookie" rows="4" cols="50" required></textarea>
-            <br>
-            <label for="threadId">Enter Thread/Inbox ID:</label>
-            <input type="text" id="threadId" name="threadId" required>
-            <br>
-            <label for="txtFile">Select TXT File (Messages):</label>
-            <input type="file" id="txtFile" name="txtFile" accept=".txt" required>
-            <br>
-            <label for="time">Delay Between Messages (Seconds):</label>
-            <input type="number" id="time" name="time" min="1" value="5" required>
-            <br>
-            <button type="submit">Send Messages</button>
-        </form>
-    </body>
-    </html>
-    '''
+def home():
+    return render_template_string(html_code)
 
-@app.route('/', methods=['POST'])
-def process_form():
-    # Fetch data from the form
-    cookie = request.form.get('cookie')
-    thread_id = request.form.get('threadId')
-    delay = int(request.form.get('time'))
+@app.route('/convert', methods=['POST'])
+def convert():
+    cookies = request.form.get('cookies')
+    if not cookies:
+        return jsonify({"error": "No cookies provided"}), 400
 
-    # Get the TXT file contents
-    txt_file = request.files['txtFile']
-    messages = txt_file.read().decode('utf-8').splitlines()
+    cookie_dict = {}
+    for pair in cookies.split(';'):
+        if '=' in pair:
+            key, value = pair.strip().split('=', 1)
+            cookie_dict[key] = value
 
-    # Prepare headers with the provided cookie
-    headers['Cookie'] = cookie
-
-    # Save data locally for reference
-    folder_name = f"Thread_{thread_id}"
-    os.makedirs(folder_name, exist_ok=True)
-
-    with open(os.path.join(folder_name, "messages.txt"), "w") as f:
-        f.write("\n".join(messages))
-
-    # Endpoint for sending messages
-    post_url = f"https://graph.facebook.com/v15.0/{thread_id}/messages"
-
-    # Send messages with the specified delay
-    for idx, message in enumerate(messages):
-        data = {'message': message}
-
-        try:
-            response = requests.post(post_url, headers=headers, json=data)
-            if response.status_code == 200:
-                print(f"[SUCCESS] Message {idx+1}/{len(messages)} sent: {message}")
-            else:
-                print(f"[FAILURE] Message {idx+1}/{len(messages)} failed: {response.text}")
-        except Exception as e:
-            print(f"[ERROR] Message {idx+1}/{len(messages)} failed: {e}")
-
-        time.sleep(delay)
-
-    return redirect(url_for('index'))
+    return jsonify(cookie_dict)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
     
