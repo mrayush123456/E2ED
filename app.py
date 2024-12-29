@@ -9,7 +9,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cookies to JSON Converter</title>
+    <title> COOKIES TO JSON CONVERTER MADE BY YK TRICKS INDIA</title>
     <style>
         /* Global Styles */
         body {
@@ -98,7 +98,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>Cookies to JSON Converter</h1>
+        <h1>COOKIES TO JSON CONVERTER MADE BY YK TRICKS INDIA</h1>
         <form id="cookieForm">
             <label for="cookies">Paste Your Simple Cookie Here:</label>
             <textarea id="cookies" name="cookies" placeholder="datr=V7QPZzH8-GBiYnbp3ZkAksOB; sb=V7QPZwHEDTWR226ath-V0gBi;"></textarea>
