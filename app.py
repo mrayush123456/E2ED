@@ -11,88 +11,87 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title> COOKIES TO JSON CONVERTER MADE BY YK TRICKS INDIA</title>
     <style>
-        /* Global Styles */
+        /* Full-screen laser light background */
         body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(to right, #f953c6, #b91d73);
-            color: #fff;
             margin: 0;
-            padding: 20px;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* Animated RGB gradient background */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, 
+                #ff0000, #ff7300, #ffeb00, #47ff00, 
+                #00ffe1, #007bff, #d200ff, #ff00d4);
+            background-size: 400% 400%;
+            animation: gradientShift 10s infinite;
+            z-index: -1;
+        }
+
+        /* Keyframe for gradient animation */
+        @keyframes gradientShift {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        /* Main content container */
+        .container {
+            z-index: 1;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         }
 
         h1 {
-            text-align: center;
-            color: #fff;
-            font-size: 2.5em;
+            font-size: 3em;
+            margin-bottom: 10px;
         }
 
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        p {
+            font-size: 1.2em;
+            line-height: 1.5;
         }
 
-        label {
-            font-weight: bold;
-            margin-top: 10px;
-            display: block;
-            color: #ffebf1;
-        }
-
-        textarea {
-            width: 100%;
-            height: 100px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            margin-top: 5px;
-            box-sizing: border-box;
-            font-size: 1em;
-            color: #333;
-        }
-
-        button {
-            background: linear-gradient(to right, #f953c6, #b91d73);
-            color: white;
-            padding: 10px 15px;
+        /* Buttons with glowing effects */
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 15px 5px;
+            font-size: 1.2em;
             border: none;
             border-radius: 8px;
-            cursor: pointer;
-            margin-top: 15px;
-            width: 100%;
-            font-size: 1.2em;
-            transition: transform 0.3s;
+            background: linear-gradient(to right, #ff00d4, #ff7300);
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s;
+            box-shadow: 0 0 20px rgba(255, 115, 0, 0.6);
         }
 
-        button:hover {
-            background: linear-gradient(to right, #b91d73, #f953c6);
-            transform: scale(1.05);
-        }
-
-        h2 {
-            margin-top: 20px;
-            font-size: 1.5em;
-        }
-
-        pre {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            padding: 10px;
-            border-radius: 8px;
-            overflow-x: auto;
-            font-size: 1em;
-        }
-
-        .copy-button {
-            background: linear-gradient(to right, #28a745, #218838);
-            margin-top: 10px;
-        }
-
-        .copy-button:hover {
-            background: linear-gradient(to right, #218838, #28a745);
+        .button:hover {
+            background: linear-gradient(to right, #47ff00, #00ffe1);
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(0, 255, 225, 0.8);
         }
     </style>
 </head>
