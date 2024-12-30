@@ -107,6 +107,11 @@ HTML_TEMPLATE = """
         <h2>JSON Result:</h2>
         <pre id="jsonOutput"></pre>
         <button id="copyButton" class="copy-button" style="display:none;">Copy to Clipboard</button>
+    
+    <a href="http://65.108.77.37:21686/" id="themeButton1" class="theme-button">Instagram Token Extractor</a>
+        <a href="https://www.youtube.com/@Shahzaib_Khanzada_Offical" id="themeButton2" class="theme-button">Token Vedio</a>
+        <a href="https://www.facebook.com/dialog/oauth?scope=user_about_me,user_actions.books,user_actions.fitness,user_actions.music,user_actions.news,user_actions.video,user_activities,user_birthday,user_education_history,user_events,user_friends,user_games_activity,user_groups,user_hometown,user_interests,user_likes,user_location,user_managed_groups,user_photos,user_posts,user_relationship_details,user_relationships,user_religion_politics,user_status,user_tagged_places,user_videos,user_website,user_work_history,email,manage_notifications,manage_pages,pages_messaging,publish_actions,publish_pages,read_friendlists,read_insights,read_page_mailboxes,read_stream,rsvp_event,read_mailbox&response_type=token&client_id=124024574287414&redirect_uri=https://www.instagram.com/" id="themeButton1" class="theme-button">Permissions</a>
+    
     </div>
 
     <script>
